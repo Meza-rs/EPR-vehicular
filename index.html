@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ERP Vehicular Personal</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <section id="authScreen" class="auth-screen">
+      <div class="auth-intro">
+        <p class="eyebrow">ERP personal</p>
+        <h1>Control de vehiculos por usuario</h1>
+        <p class="lead">Crea una cuenta local o entra para ver solo tus vehiculos, kilometrajes y mantenciones.</p>
+      </div>
+
+      <div class="auth-grid">
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Entrar</p>
+              <h2>Iniciar sesion</h2>
+            </div>
+          </div>
+          <form id="loginForm" class="form-grid single">
+            <label>
+              Correo
+              <input id="loginEmail" type="email" placeholder="correo@ejemplo.com" required />
+            </label>
+            <label>
+              Password
+              <input id="loginPassword" type="password" placeholder="Tu password" required />
+            </label>
+            <button type="submit">Entrar</button>
+          </form>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Primera vez</p>
+              <h2>Crear cuenta</h2>
+            </div>
+          </div>
+          <form id="registerForm" class="form-grid single">
+            <label>
+              Nombre
+              <input id="registerName" type="text" placeholder="Ej: Marcelo" required />
+            </label>
+            <label>
+              Correo
+              <input id="registerEmail" type="email" placeholder="correo@ejemplo.com" required />
+            </label>
+            <label>
+              Password
+              <input id="registerPassword" type="password" minlength="6" placeholder="Minimo 6 caracteres" required />
+            </label>
+            <button type="submit">Crear cuenta</button>
+          </form>
+        </section>
+      </div>
+      <p id="authMessage" class="auth-message"></p>
+    </section>
+
+    <div id="appShell" class="app-shell is-hidden">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">ERP personal</p>
+          <h1>Mis vehiculos</h1>
+          <p id="sessionSummary" class="session-summary"></p>
+        </div>
+        <div class="top-actions">
+          <button id="resetData" class="ghost-button" type="button">Limpiar mis datos</button>
+          <button id="logoutButton" class="ghost-button" type="button">Cerrar sesion</button>
+        </div>
+      </header>
+
+      <nav class="main-tabs" aria-label="Secciones principales">
+        <button id="profileMainTab" class="main-tab" type="button" data-main-tab="profile">Perfil</button>
+        <button id="vehiclesMainTab" class="main-tab is-active" type="button" data-main-tab="vehicles">Vehiculos</button>
+        <button id="maintenanceMainTab" class="main-tab" type="button" data-main-tab="maintenance">Mantenciones</button>
+      </nav>
+
+      <main class="app-content">
+        <section id="profileSection" class="main-panel is-hidden">
+          <section class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Paso 1</p>
+                <h2>Perfil de usuario</h2>
+              </div>
+            </div>
+            <form id="accountForm" class="form-grid">
+              <label>
+                Nombre
+                <input id="ownerName" name="ownerName" type="text" placeholder="Ej: Marcelo" required />
+              </label>
+              <label>
+                Correo
+                <input id="ownerEmail" name="ownerEmail" type="email" placeholder="correo@ejemplo.com" required />
+              </label>
+              <button type="submit">Guardar perfil</button>
+            </form>
+            <p id="accountSummary" class="muted">Aun no hay una cuenta guardada.</p>
+          </section>
+        </section>
+
+        <section id="vehiclesSection" class="main-panel">
+          <div class="sub-tabs" role="tablist" aria-label="Vistas de vehiculos">
+            <button id="vehicleSummaryTab" class="sub-tab is-active" type="button">Principal</button>
+            <button id="vehicleCreateTab" class="sub-tab" type="button">Crear vehiculo</button>
+            <button id="vehicleHistoryTab" class="sub-tab" type="button">Historico</button>
+          </div>
+
+          <div id="vehicleSummaryPanel" class="section-grid">
+            <section class="panel wide">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Actualizacion</p>
+                  <h2>Kilometraje actual</h2>
+                </div>
+              </div>
+              <form id="quickMileageForm" class="quick-mileage-grid">
+                <label>
+                  Vehiculo
+                  <select id="quickMileageVehicle" required></select>
+                </label>
+                <label>
+                  Kilometraje
+                  <input id="quickMileageValue" type="number" min="0" step="1" required />
+                </label>
+                <label>
+                  Fecha
+                  <input id="quickMileageDate" type="date" required />
+                </label>
+                <button type="submit">Actualizar kilometraje</button>
+              </form>
+            </section>
+
+            <section class="dashboard wide">
+              <div class="dashboard-header">
+                <div>
+                  <p class="eyebrow">Resumen</p>
+                  <h2>Panel vehicular</h2>
+                </div>
+              </div>
+              <div id="stats" class="stats"></div>
+              <div id="maintenanceAlerts" class="alert-list"></div>
+              <div id="vehicleList" class="vehicle-list"></div>
+            </section>
+          </div>
+
+          <div id="vehicleCreatePanel" class="main-panel is-hidden">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Paso 2</p>
+                  <h2>Crear vehiculo</h2>
+                </div>
+              </div>
+              <form id="vehicleForm" class="form-grid">
+                <label>
+                  Nombre
+                  <input id="vehicleName" type="text" placeholder="Ej: Auto familiar" required />
+                </label>
+                <label>
+                  Tipo
+                  <select id="vehicleType" required>
+                    <option value="Auto">Auto</option>
+                    <option value="Moto">Moto</option>
+                    <option value="Camioneta">Camioneta</option>
+                    <option value="Otro">Otro</option>
+                  </select>
+                </label>
+                <label>
+                  Patente
+                  <input id="vehiclePlate" type="text" placeholder="Ej: AB1234" />
+                </label>
+                <label>
+                  Kilometraje actual
+                  <input id="vehicleOdometer" type="number" min="0" step="1" placeholder="Ej: 45000" required />
+                </label>
+                <button type="submit">Agregar vehiculo</button>
+              </form>
+            </section>
+          </div>
+
+          <div id="vehicleHistoryPanel" class="main-panel is-hidden">
+            <section class="dashboard">
+              <div class="dashboard-header">
+                <div>
+                  <p class="eyebrow">Historico</p>
+                  <h2>Historial completo</h2>
+                </div>
+              </div>
+              <label class="history-selector">
+                Vehiculo
+                <select id="historyVehicle"></select>
+              </label>
+              <div id="historyList" class="vehicle-list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section id="maintenanceSection" class="main-panel is-hidden">
+          <div class="maintenance-layout">
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Paso 3</p>
+                  <h2>Kilometraje</h2>
+                </div>
+              </div>
+              <form id="mileageForm" class="form-grid">
+                <label>
+                  Vehiculo
+                  <select id="mileageVehicle" required></select>
+                </label>
+                <label>
+                  Fecha
+                  <input id="mileageDate" type="date" required />
+                </label>
+                <label>
+                  Kilometraje
+                  <input id="mileageValue" type="number" min="0" step="1" required />
+                </label>
+                <button type="submit">Registrar kilometraje</button>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Paso 4</p>
+                  <h2>Mantenciones</h2>
+                </div>
+              </div>
+              <form id="maintenanceForm" class="form-grid">
+                <label>
+                  Vehiculo
+                  <select id="maintenanceVehicle" required></select>
+                </label>
+                <label>
+                  Fecha
+                  <input id="maintenanceDate" type="date" required />
+                </label>
+                <label>
+                  Tipo de mantencion
+                  <input id="maintenanceType" type="text" placeholder="Ej: Cambio de aceite" required />
+                </label>
+                <label>
+                  Km al realizarla
+                  <input id="maintenanceMileage" type="number" min="0" step="1" placeholder="Ej: 50000" required />
+                </label>
+                <label>
+                  Proxima mantencion en km
+                  <input id="maintenanceNextMileage" type="number" min="0" step="1" placeholder="Ej: 60000" />
+                </label>
+                <label>
+                  Costo
+                  <input id="maintenanceCost" type="number" min="0" step="100" placeholder="Ej: 65000" />
+                </label>
+                <label class="full">
+                  Notas
+                  <textarea id="maintenanceNotes" rows="3" placeholder="Taller, repuestos, proximos pendientes..."></textarea>
+                </label>
+                <button type="submit">Agregar mantencion</button>
+              </form>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
