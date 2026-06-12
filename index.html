@@ -70,6 +70,9 @@
           <p id="sessionSummary" class="session-summary"></p>
         </div>
         <div class="top-actions">
+          <button id="exportData" class="ghost-button" type="button">Exportar JSON</button>
+          <button id="importData" class="ghost-button" type="button">Cargar JSON</button>
+          <input id="importDataFile" class="visually-hidden" type="file" accept="application/json,.json" />
           <button id="resetData" class="ghost-button" type="button">Limpiar mis datos</button>
           <button id="logoutButton" class="ghost-button" type="button">Cerrar sesion</button>
         </div>
@@ -180,6 +183,38 @@
                   Kilometraje actual
                   <input id="vehicleOdometer" type="number" min="0" step="1" placeholder="Ej: 45000" required />
                 </label>
+                <div class="preset-editor full">
+                  <div class="preset-editor-header">
+                    <div>
+                      <strong>Plan de mantencion</strong>
+                      <small>Selecciona y ajusta las mantenciones que necesita este vehiculo.</small>
+                    </div>
+                    <label class="select-all-toggle">
+                      <input id="selectAllMaintenance" type="checkbox" checked />
+                      Seleccionar todas
+                    </label>
+                  </div>
+                  <div id="maintenancePresetPreview" class="preset-preview"></div>
+                  <div class="custom-maintenance-row">
+                    <label>
+                      Nueva mantencion
+                      <input id="customMaintenanceName" type="text" placeholder="Ej: Revision de cardan" />
+                    </label>
+                    <label>
+                      Cada cuantos km
+                      <input id="customMaintenanceInterval" type="number" min="100" step="100" placeholder="Ej: 10000" />
+                    </label>
+                    <label>
+                      Prioridad
+                      <select id="customMaintenancePriority">
+                        <option value="Alta">Alta</option>
+                        <option value="Media" selected>Media</option>
+                        <option value="Baja">Baja</option>
+                      </select>
+                    </label>
+                    <button id="addCustomMaintenance" class="ghost-button" type="button">Agregar</button>
+                  </div>
+                </div>
                 <button type="submit">Agregar vehiculo</button>
               </form>
             </section>
@@ -193,49 +228,77 @@
                   <h2>Historial completo</h2>
                 </div>
               </div>
-              <label class="history-selector">
-                Vehiculo
-                <select id="historyVehicle"></select>
-              </label>
+              <div class="history-filters">
+                <label>
+                  Vehiculo
+                  <select id="historyVehicle"></select>
+                </label>
+                <label>
+                  Tipo de mantencion
+                  <select id="historyMaintenanceFilter">
+                    <option value="">Todas las mantenciones</option>
+                  </select>
+                </label>
+              </div>
               <div id="historyList" class="vehicle-list"></div>
+            </section>
+          </div>
+
+          <div id="vehiclePlanPanel" class="main-panel is-hidden">
+            <section class="dashboard">
+              <div class="dashboard-header plan-editor-heading">
+                <div>
+                  <p class="eyebrow">Plan de mantencion</p>
+                  <h2 id="planEditorVehicleName">Modificar plan</h2>
+                </div>
+                <button id="backToVehicleSummary" class="ghost-button" type="button">Volver al resumen</button>
+              </div>
+              <form id="maintenancePlanEditForm" class="plan-edit-form">
+                <div id="maintenancePlanEditList" class="plan-edit-list"></div>
+                <div class="plan-add-section">
+                  <h3>Agregar mantencion</h3>
+                  <div class="plan-add-grid">
+                    <label>
+                      Nombre
+                      <input id="planNewName" type="text" placeholder="Ej: Cambio de aceite de cardan" />
+                    </label>
+                    <label>
+                      Periodicidad en km
+                      <input id="planNewInterval" type="number" min="100" step="100" placeholder="Ej: 10000" />
+                    </label>
+                    <label>
+                      Prioridad
+                      <select id="planNewPriority">
+                        <option value="Alta">Alta</option>
+                        <option value="Media" selected>Media</option>
+                        <option value="Baja">Baja</option>
+                      </select>
+                    </label>
+                    <label class="plan-note-field">
+                      Notas
+                      <input id="planNewNotes" type="text" placeholder="Ej: Aceite 5W-30, filtro modelo..." />
+                    </label>
+                    <button id="addPlanItem" class="ghost-button" type="button">Agregar al plan</button>
+                  </div>
+                </div>
+                <p id="planEditMessage" class="form-message"></p>
+                <button type="submit">Guardar cambios del plan</button>
+              </form>
             </section>
           </div>
         </section>
 
         <section id="maintenanceSection" class="main-panel is-hidden">
-          <div class="maintenance-layout">
+          <div class="maintenance-layout single-column">
             <section class="panel">
               <div class="panel-header">
                 <div>
-                  <p class="eyebrow">Paso 3</p>
-                  <h2>Kilometraje</h2>
-                </div>
-              </div>
-              <form id="mileageForm" class="form-grid">
-                <label>
-                  Vehiculo
-                  <select id="mileageVehicle" required></select>
-                </label>
-                <label>
-                  Fecha
-                  <input id="mileageDate" type="date" required />
-                </label>
-                <label>
-                  Kilometraje
-                  <input id="mileageValue" type="number" min="0" step="1" required />
-                </label>
-                <button type="submit">Registrar kilometraje</button>
-              </form>
-            </section>
-
-            <section class="panel">
-              <div class="panel-header">
-                <div>
-                  <p class="eyebrow">Paso 4</p>
+                  <p class="eyebrow">Registro de taller</p>
                   <h2>Mantenciones</h2>
                 </div>
               </div>
-              <form id="maintenanceForm" class="form-grid">
+              <form id="maintenanceForm" class="maintenance-batch-form">
+                <div class="maintenance-batch-fields">
                 <label>
                   Vehiculo
                   <select id="maintenanceVehicle" required></select>
@@ -245,26 +308,27 @@
                   <input id="maintenanceDate" type="date" required />
                 </label>
                 <label>
-                  Tipo de mantencion
-                  <input id="maintenanceType" type="text" placeholder="Ej: Cambio de aceite" required />
-                </label>
-                <label>
                   Km al realizarla
                   <input id="maintenanceMileage" type="number" min="0" step="1" placeholder="Ej: 50000" required />
                 </label>
+                </div>
+                <div class="maintenance-selection-header">
+                  <div>
+                    <strong>Selecciona lo realizado</strong>
+                    <small>Ordenado por kilometros faltantes y prioridad.</small>
+                  </div>
+                  <label class="select-all-toggle">
+                    <input id="selectAllPerformedMaintenance" type="checkbox" />
+                    Seleccionar todas
+                  </label>
+                </div>
+                <div id="maintenancePlanSelection" class="maintenance-plan-selection"></div>
                 <label>
-                  Proxima mantencion en km
-                  <input id="maintenanceNextMileage" type="number" min="0" step="1" placeholder="Ej: 60000" />
-                </label>
-                <label>
-                  Costo
-                  <input id="maintenanceCost" type="number" min="0" step="100" placeholder="Ej: 65000" />
-                </label>
-                <label class="full">
                   Notas
                   <textarea id="maintenanceNotes" rows="3" placeholder="Taller, repuestos, proximos pendientes..."></textarea>
                 </label>
-                <button type="submit">Agregar mantencion</button>
+                <p id="maintenanceBatchMessage" class="form-message"></p>
+                <button type="submit">Guardar mantenciones realizadas</button>
               </form>
             </section>
           </div>
