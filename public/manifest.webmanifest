@@ -1,0 +1,19 @@
+{
+  "name": "ERP Vehicular Personal",
+  "short_name": "ERP Vehicular",
+  "description": "Control personal de vehiculos, kilometraje, planes y mantenciones.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f4f6f3",
+  "theme_color": "#2A3087",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ERP Vehicular Personal</title>
+    <meta name="theme-color" content="#2A3087" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/icon.svg" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -138,6 +142,28 @@
                 </label>
                 <button type="submit">Actualizar kilometraje</button>
               </form>
+              <div class="ocr-actions">
+                <button id="dashboardPhotoButton" class="ghost-button" type="button">Tomar foto del tablero</button>
+                <input id="dashboardPhotoInput" class="visually-hidden" type="file" accept="image/*" capture="environment" />
+              </div>
+              <section id="dashboardOcrPanel" class="ocr-panel is-hidden" aria-live="polite">
+                <div class="ocr-preview">
+                  <img id="dashboardPhotoPreview" alt="Foto del tablero" />
+                </div>
+                <div class="ocr-review">
+                  <p id="ocrStatus" class="ocr-status">Esperando foto...</p>
+                  <div class="ocr-progress">
+                    <span id="ocrProgressBar"></span>
+                  </div>
+                  <div id="ocrCandidates" class="ocr-candidates"></div>
+                  <label>
+                    Kilometraje detectado
+                    <input id="ocrMileageValue" type="number" min="0" step="1" />
+                  </label>
+                  <p id="ocrWarning" class="ocr-warning"></p>
+                  <button id="confirmOcrMileage" type="button">Confirmar kilometraje</button>
+                </div>
+              </section>
             </section>
 
             <section class="dashboard wide">
@@ -336,6 +362,15 @@
       </main>
     </div>
 
-    <script src="app.js"></script>
+    <script type="module" src="/app.js"></script>
+    <script>
+      if ("serviceWorker" in navigator && location.protocol !== "file:") {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("/sw.js").catch(() => {
+            console.warn("No se pudo registrar el modo instalable.");
+          });
+        });
+      }
+    </script>
   </body>
 </html>

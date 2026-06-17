@@ -2,5 +2,8 @@
 Thumbs.db
 node_modules/
 dist/
+android/
+.npm-cache*/
+.vercel-auth/
 .env
 erp-vehicular-*.json

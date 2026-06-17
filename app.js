@@ -1,5 +1,6 @@
 const STORAGE_KEY = "erpVehicularPersonal";
 const BACKUP_VERSION = 1;
+const TESSERACT_CDN_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
 
 const MAINTENANCE_PRESETS = {
   Auto: [
@@ -43,6 +44,8 @@ let app = loadApp();
 let maintenancePlanDraft = [];
 let maintenancePlanDraftType = "";
 let activePlanVehicleId = null;
+let ocrEnginePromise = null;
+let ocrPreviewUrl = "";
 
 const forms = {
   login: document.querySelector("#loginForm"),
@@ -92,6 +95,16 @@ const fields = {
   quickMileageVehicle: document.querySelector("#quickMileageVehicle"),
   quickMileageDate: document.querySelector("#quickMileageDate"),
   quickMileageValue: document.querySelector("#quickMileageValue"),
+  dashboardPhotoButton: document.querySelector("#dashboardPhotoButton"),
+  dashboardPhotoInput: document.querySelector("#dashboardPhotoInput"),
+  dashboardOcrPanel: document.querySelector("#dashboardOcrPanel"),
+  dashboardPhotoPreview: document.querySelector("#dashboardPhotoPreview"),
+  ocrStatus: document.querySelector("#ocrStatus"),
+  ocrProgressBar: document.querySelector("#ocrProgressBar"),
+  ocrCandidates: document.querySelector("#ocrCandidates"),
+  ocrMileageValue: document.querySelector("#ocrMileageValue"),
+  ocrWarning: document.querySelector("#ocrWarning"),
+  confirmOcrMileage: document.querySelector("#confirmOcrMileage"),
   maintenanceVehicle: document.querySelector("#maintenanceVehicle"),
   maintenanceDate: document.querySelector("#maintenanceDate"),
   maintenanceMileage: document.querySelector("#maintenanceMileage"),
@@ -226,6 +239,42 @@ forms.quickMileage.addEventListener("submit", (event) => {
   render();
 });
 
+fields.dashboardPhotoButton.addEventListener("click", () => {
+  const data = currentData();
+  const vehicle = selectedSummaryVehicle(data);
+  if (!vehicle) {
+    renderOcrMessage("Agrega o selecciona un vehiculo antes de tomar la foto.", "warning");
+    return;
+  }
+
+  fields.dashboardPhotoInput.value = "";
+  fields.dashboardPhotoInput.click();
+});
+
+fields.dashboardPhotoInput.addEventListener("change", async () => {
+  const file = fields.dashboardPhotoInput.files?.[0];
+  if (!file) return;
+  await handleDashboardPhoto(file);
+});
+
+fields.ocrCandidates.addEventListener("click", (event) => {
+  const candidateButton = event.target.closest("[data-ocr-candidate]");
+  if (!candidateButton) return;
+  fields.ocrCandidates.querySelectorAll("[data-ocr-candidate]").forEach((button) => {
+    button.classList.toggle("is-selected", button === candidateButton);
+  });
+  fields.ocrMileageValue.value = candidateButton.dataset.ocrCandidate;
+  updateOcrWarning();
+});
+
+fields.ocrMileageValue.addEventListener("input", () => {
+  updateOcrWarning();
+});
+
+fields.confirmOcrMileage.addEventListener("click", () => {
+  confirmOcrMileage();
+});
+
 forms.maintenance.addEventListener("submit", (event) => {
   event.preventDefault();
   const data = currentData();
@@ -330,6 +379,7 @@ fields.vehicleHistoryTab.addEventListener("click", () => {
 });
 
 fields.quickMileageVehicle.addEventListener("change", () => {
+  resetOcrPanel();
   renderStats();
   renderMaintenanceAlerts();
   renderVehicles();
@@ -452,6 +502,7 @@ fields.maintenancePlanEditForm.addEventListener("submit", (event) => {
   saveMaintenancePlanEdits();
 });
 
+// Lee el estado guardado en el navegador y normaliza versiones anteriores.
 function loadApp() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) return structuredClone(emptyApp);
@@ -476,6 +527,7 @@ function loadApp() {
   }
 }
 
+// Convierte los datos de la primera version al formato actual con usuarios.
 function migrateOldState(oldState) {
   const user = {
     id: crypto.randomUUID(),
@@ -496,14 +548,17 @@ function migrateOldState(oldState) {
   };
 }
 
+// Guarda el estado completo de la aplicacion en localStorage.
 function saveApp() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(app));
 }
 
+// Devuelve el usuario que tiene la sesion abierta.
 function currentUser() {
   return app.users.find((user) => user.id === app.currentUserId) || null;
 }
 
+// Devuelve y completa las colecciones de datos del usuario actual.
 function currentData() {
   const user = currentUser();
   if (!user) return null;
@@ -511,6 +566,7 @@ function currentData() {
   return user.data;
 }
 
+// Redibuja todas las secciones visibles con los datos mas recientes.
 function render() {
   const user = currentUser();
 
@@ -532,6 +588,7 @@ function render() {
   renderHistory();
 }
 
+// Muestra los datos del perfil y el nombre de la sesion activa.
 function renderAccount(user) {
   fields.ownerName.value = user.name;
   fields.ownerEmail.value = user.email;
@@ -539,6 +596,7 @@ function renderAccount(user) {
   fields.accountSummary.textContent = `Perfil activo: ${user.name} (${user.email})`;
 }
 
+// Actualiza todos los desplegables que permiten seleccionar un vehiculo.
 function renderVehicleOptions() {
   const data = currentData();
   const selectedQuickVehicle = fields.quickMileageVehicle.value;
@@ -561,6 +619,7 @@ function renderVehicleOptions() {
   keepSelectedVehicle(fields.historyVehicle, selectedHistoryVehicle, data);
 }
 
+// Construye el plan sugerido editable al crear un vehiculo nuevo.
 function renderPresetPreview(forceReset = false) {
   const vehicleType = fields.vehicleType.value;
   if (forceReset || maintenancePlanDraftType !== vehicleType) {
@@ -604,12 +663,14 @@ function renderPresetPreview(forceReset = false) {
   updateSelectAllState();
 }
 
+// Sincroniza la casilla Seleccionar todas del editor inicial del plan.
 function updateSelectAllState() {
   const selectedCount = maintenancePlanDraft.filter((item) => item.selected).length;
   fields.selectAllMaintenance.checked = maintenancePlanDraft.length > 0 && selectedCount === maintenancePlanDraft.length;
   fields.selectAllMaintenance.indeterminate = selectedCount > 0 && selectedCount < maintenancePlanDraft.length;
 }
 
+// Agrega una mantencion personalizada al borrador del nuevo vehiculo.
 function addCustomMaintenanceToDraft() {
   const type = fields.customMaintenanceName.value.trim();
   const intervalKm = Number(fields.customMaintenanceInterval.value);
@@ -632,6 +693,7 @@ function addCustomMaintenanceToDraft() {
   renderPresetPreview();
 }
 
+// Muestra las tareas del plan ordenadas por vencimiento y prioridad.
 function renderMaintenancePlanSelection() {
   const data = currentData();
   if (!data) return;
@@ -692,6 +754,7 @@ function renderMaintenancePlanSelection() {
   }).join("");
 }
 
+// Recalcula los proximos kilometrajes sugeridos al cambiar el km realizado.
 function updateSuggestedNextMileages() {
   const performedMileage = Number(fields.maintenanceMileage.value || 0);
   if (performedMileage <= 0) return;
@@ -701,6 +764,7 @@ function updateSuggestedNextMileages() {
   });
 }
 
+// Traduce una diferencia de kilometraje a un estado legible y visual.
 function formatPlanRemaining(remaining) {
   if (remaining < 0) return { text: `Vencida por ${formatNumber(Math.abs(remaining))} km`, className: "is-overdue" };
   if (remaining === 0) return { text: "Corresponde ahora", className: "is-due" };
@@ -708,6 +772,7 @@ function formatPlanRemaining(remaining) {
   return { text: `Faltan ${formatNumber(remaining)} km`, className: "is-planned" };
 }
 
+// Mantiene sincronizada la casilla para seleccionar todos los trabajos.
 function updatePerformedSelectAllState() {
   const checkboxes = [...fields.maintenancePlanSelection.querySelectorAll("[data-performed]")];
   const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
@@ -715,6 +780,7 @@ function updatePerformedSelectAllState() {
   fields.selectAllPerformedMaintenance.indeterminate = selectedCount > 0 && selectedCount < checkboxes.length;
 }
 
+// Crea el filtro de tipos usando las mantenciones del vehiculo elegido.
 function renderHistoryFilterOptions() {
   const data = currentData();
   if (!data) return;
@@ -733,6 +799,7 @@ function renderHistoryFilterOptions() {
   if (types.includes(previousFilter)) fields.historyMaintenanceFilter.value = previousFilter;
 }
 
+// Conserva la seleccion de un desplegable despues de volver a renderizar.
 function keepSelectedVehicle(select, previousValue, data) {
   if (previousValue && data.vehicles.some((vehicle) => vehicle.id === previousValue)) {
     select.value = previousValue;
@@ -744,11 +811,13 @@ function keepSelectedVehicle(select, previousValue, data) {
   }
 }
 
+// Obtiene el vehiculo seleccionado para el panel principal.
 function selectedSummaryVehicle(data) {
   const selectedVehicleId = fields.quickMileageVehicle.value;
   return data.vehicles.find((vehicle) => vehicle.id === selectedVehicleId) || data.vehicles[0] || null;
 }
 
+// Calcula kilometraje, cantidad de trabajos y gasto del vehiculo activo.
 function renderStats() {
   const data = currentData();
   const vehicle = selectedSummaryVehicle(data);
@@ -771,6 +840,7 @@ function renderStats() {
   `;
 }
 
+// Muestra la mantencion vencida o proxima mas urgente del vehiculo.
 function renderMaintenanceAlerts() {
   const data = currentData();
   const vehicle = selectedSummaryVehicle(data);
@@ -794,6 +864,7 @@ function renderMaintenanceAlerts() {
   `;
 }
 
+// Renderiza la tarjeta resumen del vehiculo seleccionado.
 function renderVehicles() {
   const data = currentData();
   if (data.vehicles.length === 0) {
@@ -807,6 +878,7 @@ function renderVehicles() {
     : '<div class="empty">Selecciona un vehiculo para ver su resumen.</div>';
 }
 
+// Genera el contenido de una tarjeta con resumen, historial y plan.
 function renderVehicleCard(vehicle, data) {
   const mileageItems = data.mileage
     .filter((item) => item.vehicleId === vehicle.id)
@@ -859,6 +931,7 @@ function renderVehicleCard(vehicle, data) {
   `;
 }
 
+// Genera una fila compacta para una tarea del plan de mantencion.
 function renderMaintenancePlan(plan) {
   return `
     <div class="plan-item">
@@ -873,12 +946,14 @@ function renderMaintenancePlan(plan) {
   `;
 }
 
+// Abre el editor del plan para el vehiculo indicado.
 function openMaintenancePlanEditor(vehicleId) {
   activePlanVehicleId = vehicleId;
   setVehicleTab("plan");
   renderMaintenancePlanEditor();
 }
 
+// Dibuja los campos editables de todas las tareas del plan actual.
 function renderMaintenancePlanEditor() {
   const data = currentData();
   if (!data) return;
@@ -923,6 +998,7 @@ function renderMaintenancePlanEditor() {
     : '<div class="empty">Este vehiculo no tiene mantenciones en su plan.</div>';
 }
 
+// Crea una tarea nueva dentro del plan del vehiculo seleccionado.
 function addPlanItemToVehicle() {
   const data = currentData();
   const vehicle = data?.vehicles.find((item) => item.id === activePlanVehicleId);
@@ -951,6 +1027,7 @@ function addPlanItemToVehicle() {
   renderMaintenancePlanEditor();
 }
 
+// Elimina una tarea del plan despues de pedir confirmacion al usuario.
 function deletePlanItem(planId) {
   const data = currentData();
   if (!data) return;
@@ -966,6 +1043,7 @@ function deletePlanItem(planId) {
   renderMaintenancePlanEditor();
 }
 
+// Guarda cambios de nombre, intervalo, prioridad y notas del plan.
 function saveMaintenancePlanEdits() {
   const data = currentData();
   const vehicle = data?.vehicles.find((item) => item.id === activePlanVehicleId);
@@ -1000,6 +1078,7 @@ function saveMaintenancePlanEdits() {
   renderVehicles();
 }
 
+// Permite modificar los datos basicos de un vehiculo existente.
 function editVehicle(vehicleId, data) {
   const vehicle = data.vehicles.find((item) => item.id === vehicleId);
   if (!vehicle) return;
@@ -1032,6 +1111,7 @@ function editVehicle(vehicleId, data) {
   render();
 }
 
+// Genera una fila del historial para una mantencion realizada.
 function renderMaintenanceItem(item) {
   return `
     <div class="history-item">
@@ -1048,11 +1128,13 @@ function renderMaintenanceItem(item) {
   `;
 }
 
+// Devuelve las recomendaciones base segun el tipo de vehiculo.
 function presetsForVehicleType(vehicleType) {
   if (vehicleType === "Camioneta") return MAINTENANCE_PRESETS.Auto;
   return MAINTENANCE_PRESETS[vehicleType] || [];
 }
 
+// Convierte el borrador seleccionado en tareas permanentes del vehiculo.
 function createMaintenancePlans(vehicle) {
   syncMaintenancePlanDraft();
   return maintenancePlanDraft
@@ -1068,6 +1150,7 @@ function createMaintenancePlans(vehicle) {
   }));
 }
 
+// Copia al borrador los valores actualmente escritos en el formulario.
 function syncMaintenancePlanDraft() {
   fields.maintenancePresetPreview.querySelectorAll("[data-plan-id]").forEach((row) => {
     const item = maintenancePlanDraft.find((entry) => entry.id === row.dataset.planId);
@@ -1079,14 +1162,209 @@ function syncMaintenancePlanDraft() {
   });
 }
 
+// Asigna un orden numerico para ordenar prioridades de mayor a menor.
 function priorityRank(priority) {
   return { Alta: 1, Media: 2, Baja: 3 }[priority] || 4;
 }
 
+// Muestra una advertencia comun antes de cualquier eliminacion permanente.
 function confirmDeletion(title, detail) {
   return window.confirm(`${title}\n\n${detail}\n\n¿Estas seguro de que deseas continuar?`);
 }
 
+// Carga Tesseract.js solo cuando se necesita reconocer una imagen.
+function loadOcrEngine() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (ocrEnginePromise) return ocrEnginePromise;
+
+  ocrEnginePromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = TESSERACT_CDN_URL;
+    script.async = true;
+    script.onload = () => {
+      if (window.Tesseract) {
+        resolve(window.Tesseract);
+        return;
+      }
+      reject(new Error("No se pudo iniciar el motor OCR."));
+    };
+    script.onerror = () => reject(new Error("No se pudo cargar Tesseract.js. Revisa tu conexion a internet."));
+    document.head.appendChild(script);
+  });
+
+  return ocrEnginePromise;
+}
+
+// Procesa la foto del tablero y muestra candidatos para confirmar.
+async function handleDashboardPhoto(file) {
+  const data = currentData();
+  const vehicle = selectedSummaryVehicle(data);
+  if (!vehicle) {
+    renderOcrMessage("Selecciona un vehiculo antes de procesar la foto.", "warning");
+    return;
+  }
+
+  if (ocrPreviewUrl) URL.revokeObjectURL(ocrPreviewUrl);
+  ocrPreviewUrl = URL.createObjectURL(file);
+  fields.dashboardPhotoPreview.src = ocrPreviewUrl;
+  fields.dashboardOcrPanel.classList.remove("is-hidden");
+  fields.ocrCandidates.innerHTML = "";
+  fields.ocrMileageValue.value = "";
+  fields.ocrWarning.textContent = "";
+  setOcrProgress(0);
+  renderOcrMessage("Cargando OCR local...", "info");
+
+  try {
+    const text = await recognizeMileageFromImage(file);
+    const currentMileage = getCurrentMileage(vehicle, data);
+    const candidates = extractMileageCandidates(text, currentMileage);
+    renderOcrResult(candidates, ocrPreviewUrl);
+  } catch (error) {
+    fields.ocrMileageValue.value = "";
+    fields.ocrCandidates.innerHTML = "";
+    setOcrProgress(0);
+    renderOcrMessage(`${error.message || "No se pudo reconocer la imagen."} Puedes escribir el kilometraje manualmente.`, "warning");
+  }
+}
+
+// Ejecuta el OCR restringiendo el reconocimiento a caracteres numericos.
+async function recognizeMileageFromImage(file) {
+  const Tesseract = await loadOcrEngine();
+  renderOcrMessage("Reconociendo numeros en la foto...", "info");
+
+  const result = await Tesseract.recognize(file, "eng", {
+    tessedit_char_whitelist: "0123456789., ",
+    logger: (message) => {
+      if (message.status === "recognizing text" && typeof message.progress === "number") {
+        setOcrProgress(message.progress);
+      }
+    },
+  });
+
+  setOcrProgress(1);
+  return result?.data?.text || "";
+}
+
+// Extrae, limpia y ordena posibles kilometrajes desde el texto OCR.
+function extractMileageCandidates(text, currentMileage) {
+  const matches = [...String(text).matchAll(/(?:^|[^\d])(\d{1,3}(?:[.,\s]\d{3})+|\d{3,8})(?=$|[^\d])/g)]
+    .map((match) => match[1]);
+  const uniqueCandidates = [...new Set(matches.map(normalizeMileageCandidate).filter(Boolean))]
+    .filter((value) => value >= 100)
+    .sort((a, b) => {
+      const aIsForward = a >= currentMileage ? 0 : 1;
+      const bIsForward = b >= currentMileage ? 0 : 1;
+      if (aIsForward !== bIsForward) return aIsForward - bIsForward;
+      return Math.abs(a - currentMileage) - Math.abs(b - currentMileage);
+    });
+
+  return uniqueCandidates.slice(0, 6);
+}
+
+// Convierte valores como 55.100, 55,100 o 55 100 a 55100.
+function normalizeMileageCandidate(value) {
+  const digits = String(value).replace(/\D/g, "");
+  if (digits.length < 3 || digits.length > 8) return null;
+  const number = Number(digits);
+  return Number.isFinite(number) ? number : null;
+}
+
+// Dibuja los candidatos detectados y deja uno listo para confirmar.
+function renderOcrResult(candidates) {
+  if (candidates.length === 0) {
+    fields.ocrCandidates.innerHTML = "";
+    fields.ocrMileageValue.value = "";
+    renderOcrMessage("No encontre un kilometraje claro. Escribe el valor manualmente o prueba con otra foto.", "warning");
+    return;
+  }
+
+  fields.ocrCandidates.innerHTML = `
+    <p>Candidatos detectados</p>
+    <div>
+      ${candidates.map((candidate, index) => `
+        <button class="ghost-button ${index === 0 ? "is-selected" : ""}" data-ocr-candidate="${candidate}" type="button">
+          ${formatNumber(candidate)} km
+        </button>
+      `).join("")}
+    </div>
+  `;
+  fields.ocrMileageValue.value = candidates[0];
+  renderOcrMessage("Revisa el kilometraje detectado antes de confirmarlo.", "success");
+  updateOcrWarning();
+}
+
+// Guarda el kilometraje reconocido despues de la revision del usuario.
+function confirmOcrMileage() {
+  const data = currentData();
+  const vehicle = selectedSummaryVehicle(data);
+  const mileage = Number(fields.ocrMileageValue.value);
+  if (!vehicle || !Number.isFinite(mileage) || mileage <= 0) {
+    renderOcrMessage("Ingresa un kilometraje valido antes de confirmar.", "warning");
+    return;
+  }
+
+  const currentMileage = getCurrentMileage(vehicle, data);
+  if (mileage < currentMileage) {
+    const shouldContinue = window.confirm(
+      `El kilometraje detectado (${formatNumber(mileage)} km) es menor al kilometraje actual (${formatNumber(currentMileage)} km).\n\n¿Quieres guardarlo de todas formas?`,
+    );
+    if (!shouldContinue) return;
+  }
+
+  saveMileageRecord(vehicle.id, fields.quickMileageDate.value || today(), mileage);
+  fields.quickMileageValue.value = mileage;
+  renderOcrMessage(`Kilometraje ${formatNumber(mileage)} km guardado correctamente.`, "success");
+  renderVehicleOptions();
+  renderStats();
+  renderMaintenanceAlerts();
+  renderVehicles();
+  renderHistory();
+}
+
+// Actualiza la barra de progreso del OCR.
+function setOcrProgress(progress) {
+  const safeProgress = Math.max(0, Math.min(1, Number(progress) || 0));
+  fields.ocrProgressBar.style.width = `${Math.round(safeProgress * 100)}%`;
+}
+
+// Muestra mensajes del flujo OCR con un estado visual simple.
+function renderOcrMessage(message, status = "info") {
+  fields.dashboardOcrPanel.classList.remove("is-hidden");
+  fields.ocrStatus.textContent = message;
+  fields.ocrStatus.dataset.status = status;
+}
+
+// Limpia el panel OCR cuando cambia el vehiculo seleccionado.
+function resetOcrPanel() {
+  fields.dashboardOcrPanel.classList.add("is-hidden");
+  fields.ocrCandidates.innerHTML = "";
+  fields.ocrMileageValue.value = "";
+  fields.ocrWarning.textContent = "";
+  setOcrProgress(0);
+  if (ocrPreviewUrl) {
+    URL.revokeObjectURL(ocrPreviewUrl);
+    ocrPreviewUrl = "";
+  }
+  fields.dashboardPhotoPreview.removeAttribute("src");
+}
+
+// Advierte cuando el kilometraje a confirmar retrocede respecto del actual.
+function updateOcrWarning() {
+  const data = currentData();
+  const vehicle = selectedSummaryVehicle(data);
+  const mileage = Number(fields.ocrMileageValue.value);
+  if (!vehicle || !Number.isFinite(mileage) || mileage <= 0) {
+    fields.ocrWarning.textContent = "";
+    return;
+  }
+
+  const currentMileage = getCurrentMileage(vehicle, data);
+  fields.ocrWarning.textContent = mileage < currentMileage
+    ? `Atencion: este valor es menor al kilometraje actual (${formatNumber(currentMileage)} km).`
+    : "";
+}
+
+// Descarga un respaldo JSON versionado con todos los datos de la cuenta.
 function exportCurrentUserData() {
   const user = currentUser();
   if (!user) return;
@@ -1114,6 +1392,7 @@ function exportCurrentUserData() {
   URL.revokeObjectURL(url);
 }
 
+// Lee, valida y carga un respaldo JSON sobre la cuenta actual.
 async function importCurrentUserData(file) {
   const user = currentUser();
   if (!user) return;
@@ -1137,6 +1416,7 @@ async function importCurrentUserData(file) {
   }
 }
 
+// Comprueba que un respaldo tenga version y colecciones compatibles.
 function validateBackup(backup) {
   if (!backup || typeof backup !== "object" || !backup.data || typeof backup.data !== "object") {
     throw new Error("El archivo no corresponde a un respaldo de ERP Vehicular Personal.");
@@ -1158,6 +1438,7 @@ function validateBackup(backup) {
   };
 }
 
+// Registra un kilometraje y actualiza el odometro del vehiculo.
 function saveMileageRecord(vehicleId, date, value) {
   const data = currentData();
   if (!data) return;
@@ -1177,6 +1458,7 @@ function saveMileageRecord(vehicleId, date, value) {
   saveApp();
 }
 
+// Muestra el historial completo del vehiculo y aplica el filtro elegido.
 function renderHistory() {
   const data = currentData();
   if (!data || data.vehicles.length === 0) {
@@ -1223,6 +1505,7 @@ function renderHistory() {
   `;
 }
 
+// Genera una fila visual para un registro de kilometraje.
 function renderMileageItem(item) {
   return `
     <div class="history-item">
@@ -1237,12 +1520,14 @@ function renderMileageItem(item) {
   `;
 }
 
+// Obtiene el mayor kilometraje conocido entre el vehiculo y sus registros.
 function getCurrentMileage(vehicle, data) {
   const mileageItems = data.mileage.filter((item) => item.vehicleId === vehicle.id);
   const highestMileage = mileageItems.reduce((highest, item) => Math.max(highest, Number(item.value || 0)), 0);
   return Math.max(Number(vehicle.odometer || 0), highestMileage);
 }
 
+// Busca las tareas vencidas mas urgentes o el siguiente grupo coincidente.
 function getNextMaintenanceGroup(vehicleId, data, currentMileage) {
   const planItems = data.maintenancePlans.filter((item) => item.vehicleId === vehicleId && Number(item.nextMileage) > 0);
   const scheduledItems = planItems.length > 0
@@ -1261,12 +1546,14 @@ function getNextMaintenanceGroup(vehicleId, data, currentMileage) {
   return scheduledItems.filter((item) => Number(item.nextMileage) === nextMileage);
 }
 
+// Resume los kilometrajes realizado y proximo de una mantencion historica.
 function formatMaintenanceMileage(item) {
   const maintenanceKm = item.mileage ? `${formatNumber(item.mileage)} km realizados` : "Km de mantencion no registrado";
   const nextKm = item.nextMileage ? ` - proxima en ${formatNumber(item.nextMileage)} km` : "";
   return `${maintenanceKm}${nextKm}`;
 }
 
+// Crea el texto y estilo del aviso para un grupo de mantenciones.
 function formatMaintenanceGroupStatus(maintenanceGroup, currentMileage) {
   if (maintenanceGroup.length === 0) {
     return { text: "Sin programar", names: "Sin mantenciones en el plan", className: "is-neutral" };
@@ -1290,6 +1577,7 @@ function formatMaintenanceGroupStatus(maintenanceGroup, currentMileage) {
   };
 }
 
+// Cambia entre las secciones principales Perfil, Vehiculos y Mantenciones.
 function setMainTab(tabName) {
   const isProfile = tabName === "profile";
   const isVehicles = tabName === "vehicles";
@@ -1303,6 +1591,7 @@ function setMainTab(tabName) {
   fields.maintenanceSection.classList.toggle("is-hidden", !isMaintenance);
 }
 
+// Cambia entre las vistas internas de la seccion Vehiculos.
 function setVehicleTab(tabName) {
   const isSummary = tabName === "summary";
   const isCreate = tabName === "create";
@@ -1318,23 +1607,28 @@ function setVehicleTab(tabName) {
   fields.vehiclePlanPanel.classList.toggle("is-hidden", !isPlan);
 }
 
+// Presenta errores o avisos en la pantalla de acceso.
 function showAuthMessage(message) {
   fields.authMessage.textContent = message;
 }
 
+// Completa con la fecha actual los campos de fecha que esten vacios.
 function setTodayDefaults() {
   fields.quickMileageDate.value ||= today();
   fields.maintenanceDate.value ||= today();
 }
 
+// Devuelve la fecha actual en el formato YYYY-MM-DD de los inputs HTML.
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
 
+// Limpia y normaliza correos para compararlos sin diferencias de mayusculas.
 function normalizeEmail(value) {
   return value.trim().toLowerCase();
 }
 
+// Genera una huella de la password para no guardarla como texto visible.
 async function hashPassword(password) {
   if (!crypto.subtle) return simpleHash(password);
 
@@ -1345,6 +1639,7 @@ async function hashPassword(password) {
     .join("");
 }
 
+// Proporciona una huella local basica cuando Web Crypto no esta disponible.
 function simpleHash(value) {
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {
@@ -1354,6 +1649,7 @@ function simpleHash(value) {
   return `local-${Math.abs(hash)}`;
 }
 
+// Formatea montos como pesos chilenos.
 function formatCurrency(value) {
   return new Intl.NumberFormat("es-CL", {
     style: "currency",
@@ -1362,14 +1658,17 @@ function formatCurrency(value) {
   }).format(value);
 }
 
+// Formatea numeros usando separadores locales de Chile.
 function formatNumber(value) {
   return new Intl.NumberFormat("es-CL").format(value);
 }
 
+// Convierte una fecha almacenada al formato visible chileno.
 function formatDate(value) {
   return new Intl.DateTimeFormat("es-CL").format(new Date(`${value}T00:00:00`));
 }
 
+// Escapa texto ingresado por usuarios antes de insertarlo en HTML.
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")

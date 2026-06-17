@@ -5,8 +5,32 @@ Primera version de una app simple para administrar vehiculos personales.
 ## Como abrirla
 
 1. Abre la carpeta `ERP veicular` en Visual Studio Code.
-2. Abre el archivo `index.html`.
-3. Haz doble clic en `index.html` o usa la extension Live Server para verlo en el navegador.
+2. Instala las dependencias con `npm install`.
+3. Ejecuta `npm run dev` y abre la URL que muestra Vite.
+
+Abrir `index.html` directo sirve solo para una prueba simple. Para probar el modo instalable, el service worker y la futura APK, usa Vite.
+
+## Como ejecutarla como app web moderna
+
+1. Instala dependencias:
+
+```powershell
+npm install
+```
+
+2. Levanta el servidor local:
+
+```powershell
+npm run dev
+```
+
+3. Para crear una version publicable:
+
+```powershell
+npm run build
+```
+
+La carpeta de salida sera `dist`.
 
 ## Que hace esta version
 
@@ -26,6 +50,7 @@ Primera version de una app simple para administrar vehiculos personales.
 - Edita datos basicos de cada vehiculo.
 - Registra kilometraje por vehiculo.
 - En Vehiculos > Principal muestra el resumen del vehiculo seleccionado en el actualizador de kilometraje.
+- Permite tomar o cargar una foto del tablero para detectar kilometraje con OCR local y confirmar antes de guardar.
 - Registra mantenciones con fecha, kilometraje realizado, proximo kilometraje, costo y notas.
 - En Mantenciones muestra el plan del vehiculo ordenado por kilometros restantes y prioridad.
 - Permite marcar varias tareas realizadas y guardarlas juntas como una sola carga de taller.
@@ -50,6 +75,7 @@ Importante: esta version es para aprender y probar el flujo. Para una app real c
 - GitHub: respaldo online del proyecto y forma de compartir avances.
 - Live Server: extension de VS Code para abrir la app rapidamente mientras editas.
 - Supabase o Firebase: opciones simples para agregar base de datos, usuarios y login real mas adelante.
+- Android Studio: necesario cuando queramos generar una APK real con Capacitor.
 
 ## Sobre Git en esta carpeta
 
@@ -63,8 +89,18 @@ Despues de eso podras usar comandos como `git status`, `git add .` y `git commit
 
 ## Proximos pasos sugeridos
 
-1. Mejorar la edicion de vehiculos y agregar edicion de mantenciones.
-2. Agregar alertas visuales mas completas para mantenciones vencidas o cercanas.
-3. Pasar de `localStorage` a una base de datos.
-4. Crear inicio de sesion real.
-5. Convertirla en una app web moderna con React o similar.
+1. Probar la version PWA compilada con `npm run build` y `npm run preview`.
+2. Mejorar alertas visuales para mantenciones vencidas o cercanas.
+3. Pasar de `localStorage` a Supabase para sincronizar PC y telefono.
+4. Reemplazar el login local por inicio de sesion real.
+5. Generar una APK de prueba con Capacitor cuando la version web este estable.
+
+## Lanzamiento web, PWA y APK
+
+La base PWA ya esta agregada con `public/manifest.webmanifest`, `public/sw.js`, icono y configuracion de Vite.
+
+Para la ruta completa de publicacion, Supabase y APK revisa:
+
+```text
+docs/lanzamiento.md
+```

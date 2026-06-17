@@ -1,0 +1,18 @@
+{
+  "name": "erp-vehicular-personal",
+  "version": "0.2.0",
+  "private": true,
+  "description": "ERP vehicular personal web/PWA preparado para APK Android.",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "android:init": "npm install @capacitor/core @capacitor/cli @capacitor/android && npx cap init \"ERP Vehicular\" \"cl.erpvehicular.app\" --web-dir dist",
+    "android:add": "npx cap add android",
+    "android:sync": "npm run build && npx cap sync android",
+    "android:open": "npx cap open android"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}
