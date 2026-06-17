@@ -1,6 +1,16 @@
+import { createClient } from "@supabase/supabase-js";
+import { inject } from "@vercel/analytics";
+
 const STORAGE_KEY = "erpVehicularPersonal";
 const BACKUP_VERSION = 1;
 const TESSERACT_CDN_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabase = SUPABASE_URL && SUPABASE_ANON_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+
+inject();
 
 const MAINTENANCE_PRESETS = {
   Auto: [
@@ -40,12 +50,13 @@ const emptyApp = {
   currentUserId: null,
 };
 
-let app = loadApp();
+let app = structuredClone(emptyApp);
 let maintenancePlanDraft = [];
 let maintenancePlanDraftType = "";
 let activePlanVehicleId = null;
 let ocrEnginePromise = null;
 let ocrPreviewUrl = "";
+let saveQueue = Promise.resolve();
 
 const forms = {
   login: document.querySelector("#loginForm"),
@@ -137,67 +148,84 @@ const fields = {
 
 forms.register.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!ensureSupabaseReady()) return;
+
   const name = fields.registerName.value.trim();
   const email = normalizeEmail(fields.registerEmail.value);
   const password = fields.registerPassword.value;
 
-  if (app.users.some((user) => user.email === email)) {
-    showAuthMessage("Ese correo ya tiene una cuenta creada.");
-    return;
+  try {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { name } },
+    });
+    if (error) throw error;
+
+    if (data.session?.user) {
+      await upsertProfile(data.user.id, name, email);
+    }
+
+    forms.register.reset();
+    if (data.session?.user) {
+      await loadAuthenticatedUser(data.session.user);
+      render();
+    } else {
+      showAuthMessage("Cuenta creada. Revisa tu correo si Supabase pide confirmar la cuenta antes de entrar.");
+    }
+  } catch (error) {
+    showAuthMessage(`No se pudo crear la cuenta. ${error.message || "Intentalo nuevamente."}`);
   }
-
-  const user = {
-    id: crypto.randomUUID(),
-    name,
-    email,
-    passwordHash: await hashPassword(password),
-    data: structuredClone(emptyData),
-    createdAt: new Date().toISOString(),
-  };
-
-  app.users.push(user);
-  app.currentUserId = user.id;
-  forms.register.reset();
-  saveApp();
-  render();
 });
 
 forms.login.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!ensureSupabaseReady()) return;
+
   const email = normalizeEmail(fields.loginEmail.value);
-  const passwordHash = await hashPassword(fields.loginPassword.value);
-  const user = app.users.find((item) => item.email === email && item.passwordHash === passwordHash);
+  const password = fields.loginPassword.value;
 
-  if (!user) {
-    showAuthMessage("Correo o password incorrectos.");
-    return;
+  try {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+
+    await loadAuthenticatedUser(data.user);
+    forms.login.reset();
+    render();
+  } catch (error) {
+    showAuthMessage(`Correo o password incorrectos. ${error.message || ""}`.trim());
   }
-
-  app.currentUserId = user.id;
-  forms.login.reset();
-  saveApp();
-  render();
 });
 
-forms.account.addEventListener("submit", (event) => {
+forms.account.addEventListener("submit", async (event) => {
   event.preventDefault();
   const user = currentUser();
   if (!user) return;
 
   const newEmail = normalizeEmail(fields.ownerEmail.value);
-  const emailTaken = app.users.some((item) => item.id !== user.id && item.email === newEmail);
-  if (emailTaken) {
-    fields.accountSummary.textContent = "Ese correo ya esta usado por otra cuenta.";
-    return;
-  }
+  const newName = fields.ownerName.value.trim();
+  const emailChanged = newEmail !== user.email;
 
-  user.name = fields.ownerName.value.trim();
-  user.email = newEmail;
-  saveApp();
-  render();
+  try {
+    const updatePayload = { data: { name: newName } };
+    if (emailChanged) updatePayload.email = newEmail;
+
+    const { error } = await supabase.auth.updateUser(updatePayload);
+    if (error) throw error;
+
+    await upsertProfile(user.id, newName, newEmail);
+    user.name = newName;
+    user.email = newEmail;
+    fields.accountSummary.textContent = emailChanged
+      ? "Perfil actualizado. Si cambiaste el correo, Supabase puede pedir confirmacion."
+      : "Perfil actualizado correctamente.";
+    render();
+  } catch (error) {
+    fields.accountSummary.textContent = `No se pudo actualizar el perfil. ${error.message || ""}`.trim();
+  }
 });
 
-forms.vehicle.addEventListener("submit", (event) => {
+forms.vehicle.addEventListener("submit", async (event) => {
   event.preventDefault();
   const data = currentData();
   if (!data) return;
@@ -225,14 +253,14 @@ forms.vehicle.addEventListener("submit", (event) => {
   maintenancePlanDraft = [];
   maintenancePlanDraftType = "";
   renderPresetPreview(true);
-  saveApp();
+  await saveApp();
   render();
 });
 
-forms.quickMileage.addEventListener("submit", (event) => {
+forms.quickMileage.addEventListener("submit", async (event) => {
   event.preventDefault();
   const vehicleId = fields.quickMileageVehicle.value;
-  saveMileageRecord(vehicleId, fields.quickMileageDate.value, Number(fields.quickMileageValue.value));
+  await saveMileageRecord(vehicleId, fields.quickMileageDate.value, Number(fields.quickMileageValue.value));
   forms.quickMileage.reset();
   fields.quickMileageVehicle.value = vehicleId;
   setTodayDefaults();
@@ -271,11 +299,11 @@ fields.ocrMileageValue.addEventListener("input", () => {
   updateOcrWarning();
 });
 
-fields.confirmOcrMileage.addEventListener("click", () => {
-  confirmOcrMileage();
+fields.confirmOcrMileage.addEventListener("click", async () => {
+  await confirmOcrMileage();
 });
 
-forms.maintenance.addEventListener("submit", (event) => {
+forms.maintenance.addEventListener("submit", async (event) => {
   event.preventDefault();
   const data = currentData();
   if (!data) return;
@@ -313,11 +341,11 @@ forms.maintenance.addEventListener("submit", (event) => {
   fields.maintenanceVehicle.value = vehicleId;
   fields.maintenanceBatchMessage.textContent = "";
   setTodayDefaults();
-  saveApp();
+  await saveApp();
   render();
 });
 
-fields.resetData.addEventListener("click", () => {
+fields.resetData.addEventListener("click", async () => {
   const user = currentUser();
   if (!user) return;
 
@@ -328,7 +356,7 @@ fields.resetData.addEventListener("click", () => {
   if (!shouldReset) return;
 
   user.data = structuredClone(emptyData);
-  saveApp();
+  await saveApp();
   render();
 });
 
@@ -347,9 +375,10 @@ fields.importDataFile.addEventListener("change", async () => {
   await importCurrentUserData(file);
 });
 
-fields.logoutButton.addEventListener("click", () => {
+fields.logoutButton.addEventListener("click", async () => {
+  await supabase?.auth.signOut();
   app.currentUserId = null;
-  saveApp();
+  app.users = [];
   render();
 });
 
@@ -445,13 +474,13 @@ fields.historyMaintenanceFilter.addEventListener("change", () => {
   renderHistory();
 });
 
-fields.vehicleList.addEventListener("click", (event) => {
+fields.vehicleList.addEventListener("click", async (event) => {
   const data = currentData();
   if (!data) return;
 
   const editButton = event.target.closest("[data-edit-vehicle]");
   if (editButton) {
-    editVehicle(editButton.dataset.editVehicle, data);
+    await editVehicle(editButton.dataset.editVehicle, data);
     return;
   }
 
@@ -479,7 +508,7 @@ fields.vehicleList.addEventListener("click", (event) => {
   data.mileage = data.mileage.filter((item) => item.vehicleId !== vehicleId);
   data.maintenance = data.maintenance.filter((item) => item.vehicleId !== vehicleId);
   data.maintenancePlans = data.maintenancePlans.filter((item) => item.vehicleId !== vehicleId);
-  saveApp();
+  await saveApp();
   render();
 });
 
@@ -487,70 +516,259 @@ fields.backToVehicleSummary.addEventListener("click", () => {
   setVehicleTab("summary");
 });
 
-fields.addPlanItem.addEventListener("click", () => {
-  addPlanItemToVehicle();
+fields.addPlanItem.addEventListener("click", async () => {
+  await addPlanItemToVehicle();
 });
 
-fields.maintenancePlanEditList.addEventListener("click", (event) => {
+fields.maintenancePlanEditList.addEventListener("click", async (event) => {
   const deleteButton = event.target.closest("[data-delete-plan-item]");
   if (!deleteButton) return;
-  deletePlanItem(deleteButton.dataset.deletePlanItem);
+  await deletePlanItem(deleteButton.dataset.deletePlanItem);
 });
 
-fields.maintenancePlanEditForm.addEventListener("submit", (event) => {
+fields.maintenancePlanEditForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  saveMaintenancePlanEdits();
+  await saveMaintenancePlanEdits();
 });
 
-// Lee el estado guardado en el navegador y normaliza versiones anteriores.
-function loadApp() {
-  const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return structuredClone(emptyApp);
+// Inicia la app leyendo la sesion actual de Supabase.
+async function initApp() {
+  if (!ensureSupabaseReady()) {
+    render();
+    return;
+  }
 
   try {
-    const parsed = JSON.parse(saved);
+    const { data, error } = await supabase.auth.getSession();
+    if (error) throw error;
 
-    if (Array.isArray(parsed.vehicles)) {
-      return migrateOldState(parsed);
+    if (data.session?.user) {
+      await loadAuthenticatedUser(data.session.user);
     }
-
-    return {
-      ...structuredClone(emptyApp),
-      ...parsed,
-      users: (parsed.users || []).map((user) => ({
-        ...user,
-        data: { ...structuredClone(emptyData), ...(user.data || {}) },
-      })),
-    };
-  } catch {
-    return structuredClone(emptyApp);
+  } catch (error) {
+    showAuthMessage(`No se pudo cargar la sesion. ${error.message || ""}`.trim());
   }
+
+  render();
 }
 
-// Convierte los datos de la primera version al formato actual con usuarios.
-function migrateOldState(oldState) {
-  const user = {
-    id: crypto.randomUUID(),
-    name: oldState.account?.name || "Usuario local",
-    email: normalizeEmail(oldState.account?.email || "usuario@local.app"),
-    passwordHash: "",
-    data: {
-      vehicles: oldState.vehicles || [],
-      mileage: oldState.mileage || [],
-      maintenance: oldState.maintenance || [],
-    },
-    createdAt: new Date().toISOString(),
+// Comprueba que existan las variables de entorno necesarias para Supabase.
+function ensureSupabaseReady() {
+  if (supabase) return true;
+  showAuthMessage("Falta configurar Supabase. Agrega VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en .env y en Vercel.");
+  return false;
+}
+
+// Carga perfil y datos remotos del usuario autenticado.
+async function loadAuthenticatedUser(authUser) {
+  const profile = await loadProfile(authUser);
+  const data = await loadRemoteData(authUser.id);
+  app = {
+    users: [{
+      id: authUser.id,
+      name: profile.name,
+      email: profile.email,
+      data,
+      createdAt: authUser.created_at || new Date().toISOString(),
+    }],
+    currentUserId: authUser.id,
   };
+}
+
+// Obtiene o crea el perfil publico asociado al usuario de Supabase Auth.
+async function loadProfile(authUser) {
+  const fallback = {
+    name: authUser.user_metadata?.name || authUser.email?.split("@")[0] || "Usuario",
+    email: authUser.email || "",
+  };
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("name,email")
+    .eq("id", authUser.id)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (data) return { name: data.name || fallback.name, email: data.email || fallback.email };
+
+  await upsertProfile(authUser.id, fallback.name, fallback.email);
+  return fallback;
+}
+
+// Guarda el perfil del usuario en Supabase.
+async function upsertProfile(userId, name, email) {
+  const { error } = await supabase.from("profiles").upsert({
+    id: userId,
+    name,
+    email,
+    updated_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
+// Lee todas las colecciones del usuario desde Supabase y las convierte al formato de la UI.
+async function loadRemoteData(userId) {
+  const [
+    vehicles,
+    mileage,
+    maintenancePlans,
+    maintenance,
+  ] = await Promise.all([
+    fetchTable("vehicles", userId),
+    fetchTable("mileage_records", userId),
+    fetchTable("maintenance_plans", userId),
+    fetchTable("maintenance_records", userId),
+  ]);
 
   return {
-    users: [user],
-    currentUserId: null,
+    vehicles: vehicles.map(mapVehicleFromDb),
+    mileage: mileage.map(mapMileageFromDb),
+    maintenancePlans: maintenancePlans.map(mapPlanFromDb),
+    maintenance: maintenance.map(mapMaintenanceFromDb),
   };
 }
 
-// Guarda el estado completo de la aplicacion en localStorage.
+// Lee una tabla filtrada por usuario.
+async function fetchTable(table, userId) {
+  const { data, error } = await supabase.from(table).select("*").eq("user_id", userId);
+  if (error) throw error;
+  return data || [];
+}
+
+// Sincroniza el estado actual completo hacia Supabase.
 function saveApp() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(app));
+  const user = currentUser();
+  if (!user || !supabase) return Promise.resolve();
+
+  saveQueue = saveQueue
+    .catch(() => {})
+    .then(() => persistCurrentUserData(user))
+    .catch((error) => {
+      showDataError(error);
+    });
+  return saveQueue;
+}
+
+// Reemplaza las colecciones remotas del usuario por el estado actual de la UI.
+async function persistCurrentUserData(user) {
+  const data = { ...structuredClone(emptyData), ...(user.data || {}) };
+  await upsertProfile(user.id, user.name, user.email);
+
+  await deleteUserRows("maintenance_records", user.id);
+  await deleteUserRows("maintenance_plans", user.id);
+  await deleteUserRows("mileage_records", user.id);
+  await deleteUserRows("vehicles", user.id);
+
+  await insertRows("vehicles", data.vehicles.map((vehicle) => mapVehicleToDb(vehicle, user.id)));
+  await insertRows("mileage_records", data.mileage.map((item) => mapMileageToDb(item, user.id)));
+  await insertRows("maintenance_plans", data.maintenancePlans.map((plan) => mapPlanToDb(plan, user.id)));
+  await insertRows("maintenance_records", data.maintenance.map((item) => mapMaintenanceToDb(item, user.id)));
+}
+
+async function deleteUserRows(table, userId) {
+  const { error } = await supabase.from(table).delete().eq("user_id", userId);
+  if (error) throw error;
+}
+
+async function insertRows(table, rows) {
+  if (rows.length === 0) return;
+  const { error } = await supabase.from(table).insert(rows);
+  if (error) throw error;
+}
+
+function mapVehicleFromDb(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    plate: row.plate || "",
+    odometer: Number(row.odometer || 0),
+    createdAt: row.created_at,
+  };
+}
+
+function mapVehicleToDb(vehicle, userId) {
+  return {
+    id: vehicle.id,
+    user_id: userId,
+    name: vehicle.name,
+    type: vehicle.type,
+    plate: vehicle.plate || null,
+    odometer: Number(vehicle.odometer || 0),
+    created_at: vehicle.createdAt || new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function mapMileageFromDb(row) {
+  return {
+    id: row.id,
+    vehicleId: row.vehicle_id,
+    date: row.record_date,
+    value: Number(row.value || 0),
+  };
+}
+
+function mapMileageToDb(item, userId) {
+  return {
+    id: item.id,
+    user_id: userId,
+    vehicle_id: item.vehicleId,
+    record_date: item.date,
+    value: Number(item.value || 0),
+  };
+}
+
+function mapPlanFromDb(row) {
+  return {
+    id: row.id,
+    vehicleId: row.vehicle_id,
+    type: row.type,
+    intervalKm: Number(row.interval_km || 0),
+    priority: row.priority || "Media",
+    nextMileage: Number(row.next_mileage || 0),
+    notes: row.notes || "",
+  };
+}
+
+function mapPlanToDb(plan, userId) {
+  return {
+    id: plan.id,
+    user_id: userId,
+    vehicle_id: plan.vehicleId,
+    type: plan.type,
+    interval_km: Number(plan.intervalKm || 0),
+    priority: plan.priority || "Media",
+    next_mileage: Number(plan.nextMileage || 0),
+    notes: plan.notes || "",
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function mapMaintenanceFromDb(row) {
+  return {
+    id: row.id,
+    vehicleId: row.vehicle_id,
+    date: row.record_date,
+    type: row.type,
+    mileage: Number(row.mileage || 0),
+    nextMileage: Number(row.next_mileage || 0),
+    cost: Number(row.cost || 0),
+    notes: row.notes || "",
+  };
+}
+
+function mapMaintenanceToDb(item, userId) {
+  return {
+    id: item.id,
+    user_id: userId,
+    vehicle_id: item.vehicleId,
+    record_date: item.date,
+    type: item.type,
+    mileage: Number(item.mileage || 0),
+    next_mileage: Number(item.nextMileage || 0),
+    cost: Number(item.cost || 0),
+    notes: item.notes || "",
+  };
 }
 
 // Devuelve el usuario que tiene la sesion abierta.
@@ -572,9 +790,9 @@ function render() {
 
   fields.authScreen.classList.toggle("is-hidden", Boolean(user));
   fields.appShell.classList.toggle("is-hidden", !user);
-  fields.authMessage.textContent = "";
 
   if (!user) return;
+  fields.authMessage.textContent = "";
 
   setTodayDefaults();
   renderAccount(user);
@@ -999,7 +1217,7 @@ function renderMaintenancePlanEditor() {
 }
 
 // Crea una tarea nueva dentro del plan del vehiculo seleccionado.
-function addPlanItemToVehicle() {
+async function addPlanItemToVehicle() {
   const data = currentData();
   const vehicle = data?.vehicles.find((item) => item.id === activePlanVehicleId);
   const type = fields.planNewName.value.trim();
@@ -1023,12 +1241,12 @@ function addPlanItemToVehicle() {
   fields.planNewPriority.value = "Media";
   fields.planNewNotes.value = "";
   fields.planEditMessage.textContent = "Mantencion agregada al plan.";
-  saveApp();
+  await saveApp();
   renderMaintenancePlanEditor();
 }
 
 // Elimina una tarea del plan despues de pedir confirmacion al usuario.
-function deletePlanItem(planId) {
+async function deletePlanItem(planId) {
   const data = currentData();
   if (!data) return;
   const plan = data.maintenancePlans.find((item) => item.id === planId);
@@ -1039,12 +1257,12 @@ function deletePlanItem(planId) {
   if (!shouldDelete) return;
 
   data.maintenancePlans = data.maintenancePlans.filter((item) => item.id !== planId);
-  saveApp();
+  await saveApp();
   renderMaintenancePlanEditor();
 }
 
 // Guarda cambios de nombre, intervalo, prioridad y notas del plan.
-function saveMaintenancePlanEdits() {
+async function saveMaintenancePlanEdits() {
   const data = currentData();
   const vehicle = data?.vehicles.find((item) => item.id === activePlanVehicleId);
   if (!vehicle) return;
@@ -1071,7 +1289,7 @@ function saveMaintenancePlanEdits() {
     }
   });
 
-  saveApp();
+  await saveApp();
   fields.planEditMessage.textContent = "Plan actualizado correctamente.";
   renderMaintenancePlanEditor();
   renderMaintenancePlanSelection();
@@ -1079,7 +1297,7 @@ function saveMaintenancePlanEdits() {
 }
 
 // Permite modificar los datos basicos de un vehiculo existente.
-function editVehicle(vehicleId, data) {
+async function editVehicle(vehicleId, data) {
   const vehicle = data.vehicles.find((item) => item.id === vehicleId);
   if (!vehicle) return;
 
@@ -1107,7 +1325,7 @@ function editVehicle(vehicleId, data) {
     value: vehicle.odometer,
   });
 
-  saveApp();
+  await saveApp();
   render();
 }
 
@@ -1294,7 +1512,7 @@ function renderOcrResult(candidates) {
 }
 
 // Guarda el kilometraje reconocido despues de la revision del usuario.
-function confirmOcrMileage() {
+async function confirmOcrMileage() {
   const data = currentData();
   const vehicle = selectedSummaryVehicle(data);
   const mileage = Number(fields.ocrMileageValue.value);
@@ -1311,7 +1529,7 @@ function confirmOcrMileage() {
     if (!shouldContinue) return;
   }
 
-  saveMileageRecord(vehicle.id, fields.quickMileageDate.value || today(), mileage);
+  await saveMileageRecord(vehicle.id, fields.quickMileageDate.value || today(), mileage);
   fields.quickMileageValue.value = mileage;
   renderOcrMessage(`Kilometraje ${formatNumber(mileage)} km guardado correctamente.`, "success");
   renderVehicleOptions();
@@ -1408,7 +1626,7 @@ async function importCurrentUserData(file) {
 
     user.data = importedData;
     if (backup.user?.name) user.name = String(backup.user.name).trim() || user.name;
-    saveApp();
+    await saveApp();
     render();
     window.alert("El respaldo se cargo correctamente.");
   } catch (error) {
@@ -1439,7 +1657,7 @@ function validateBackup(backup) {
 }
 
 // Registra un kilometraje y actualiza el odometro del vehiculo.
-function saveMileageRecord(vehicleId, date, value) {
+async function saveMileageRecord(vehicleId, date, value) {
   const data = currentData();
   if (!data) return;
 
@@ -1455,7 +1673,7 @@ function saveMileageRecord(vehicleId, date, value) {
     vehicle.odometer = Math.max(Number(vehicle.odometer || 0), value);
   }
 
-  saveApp();
+  await saveApp();
 }
 
 // Muestra el historial completo del vehiculo y aplica el filtro elegido.
@@ -1612,6 +1830,13 @@ function showAuthMessage(message) {
   fields.authMessage.textContent = message;
 }
 
+// Muestra problemas de sincronizacion con Supabase sin ocultarlos en consola.
+function showDataError(error) {
+  const message = error?.message || "No se pudo sincronizar con Supabase.";
+  console.error(error);
+  window.alert(`No se pudo guardar en la base de datos. ${message}`);
+}
+
 // Completa con la fecha actual los campos de fecha que esten vacios.
 function setTodayDefaults() {
   fields.quickMileageDate.value ||= today();
@@ -1678,4 +1903,4 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
-render();
+initApp();

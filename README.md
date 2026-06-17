@@ -34,8 +34,8 @@ La carpeta de salida sera `dist`.
 
 ## Que hace esta version
 
-- Crea una cuenta local con nombre, correo y password.
-- Permite iniciar y cerrar sesion.
+- Crea una cuenta con email y password usando Supabase Auth.
+- Permite iniciar y cerrar sesion desde distintos dispositivos.
 - Organiza la app en pestañas superiores: Perfil, Vehiculos y Mantenciones.
 - En Vehiculos separa Principal, Crear vehiculo e Historico.
 - Ingresa vehiculos personales: auto, moto, camioneta u otro.
@@ -62,11 +62,12 @@ La carpeta de salida sera `dist`.
 - Muestra solo las ultimas 3 mantenciones en el resumen de cada vehiculo.
 - Incluye una vista Historico dentro de Vehiculos para seleccionar un vehiculo y ver todos sus registros.
 - Permite filtrar el historial por tipo de mantencion.
-- Separa los vehiculos por usuario dentro del navegador usando `localStorage`.
+- Sincroniza los vehiculos por usuario usando Supabase.
+- Incluye Vercel Analytics basico para medir visitas sin eventos personalizados.
 
 Los intervalos preestablecidos son orientativos. El manual del fabricante y las condiciones de uso del vehiculo tienen prioridad.
 
-Importante: esta version es para aprender y probar el flujo. Para una app real con varios usuarios, passwords seguras y acceso desde distintos dispositivos, necesitaremos conectar una base de datos y autenticacion real.
+Importante: para que la app funcione en local o Vercel debes configurar Supabase con las variables `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
 
 ## Herramientas recomendadas para aprender
 
@@ -74,7 +75,7 @@ Importante: esta version es para aprender y probar el flujo. Para una app real c
 - Git: guarda el historial de cambios del proyecto en tu computador.
 - GitHub: respaldo online del proyecto y forma de compartir avances.
 - Live Server: extension de VS Code para abrir la app rapidamente mientras editas.
-- Supabase o Firebase: opciones simples para agregar base de datos, usuarios y login real mas adelante.
+- Supabase: base de datos, usuarios y login real.
 - Android Studio: necesario cuando queramos generar una APK real con Capacitor.
 
 ## Sobre Git en esta carpeta
@@ -90,9 +91,9 @@ Despues de eso podras usar comandos como `git status`, `git add .` y `git commit
 ## Proximos pasos sugeridos
 
 1. Probar la version PWA compilada con `npm run build` y `npm run preview`.
-2. Mejorar alertas visuales para mantenciones vencidas o cercanas.
-3. Pasar de `localStorage` a Supabase para sincronizar PC y telefono.
-4. Reemplazar el login local por inicio de sesion real.
+2. Configurar Supabase en Vercel con las variables de entorno.
+3. Habilitar Web Analytics en el dashboard de Vercel.
+4. Mejorar alertas visuales para mantenciones vencidas o cercanas.
 5. Generar una APK de prueba con Capacitor cuando la version web este estable.
 
 ## Lanzamiento web, PWA y APK

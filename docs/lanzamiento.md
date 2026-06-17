@@ -38,7 +38,8 @@ Subir el proyecto a Vercel, Netlify o GitHub Pages usando el comando de build `n
 2. Copiar `.env.example` a `.env`.
 3. Completar `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
 4. Ejecutar `supabase/schema.sql` en SQL Editor.
-5. Migrar datos desde JSON exportado o desde localStorage.
+5. En Authentication, revisar si quieres exigir confirmacion por correo. Para pruebas rapidas puedes desactivar confirmacion de email.
+6. Migrar datos usando el boton Cargar JSON desde un respaldo exportado.
 
 ## 4. Crear APK de prueba
 
@@ -64,6 +65,15 @@ npm run android:open
 
 Desde Android Studio se genera el APK de prueba.
 
+## 5. Habilitar Vercel Analytics
+
+1. Entrar al proyecto en Vercel.
+2. Abrir Analytics.
+3. Activar Web Analytics.
+4. Publicar nuevamente si Vercel lo solicita.
+
+La app ya incluye la integracion basica de `@vercel/analytics`, sin eventos personalizados.
+
 ## Nota importante
 
-La app actual sigue usando `localStorage`. La PWA y el APK funcionaran para pruebas, pero para tener los mismos datos en PC y telefono se debe conectar Supabase.
+La app ahora usa Supabase como fuente principal. Si faltan las variables de entorno, la pantalla de acceso mostrara un aviso y no se podra iniciar sesion.
