@@ -57,6 +57,8 @@ let activePlanVehicleId = null;
 let ocrEnginePromise = null;
 let ocrPreviewUrl = "";
 let saveQueue = Promise.resolve();
+let appMessage = null;
+let appMessageTimeout = null;
 
 const forms = {
   login: document.querySelector("#loginForm"),
@@ -71,6 +73,7 @@ const fields = {
   authScreen: document.querySelector("#authScreen"),
   appShell: document.querySelector("#appShell"),
   authMessage: document.querySelector("#authMessage"),
+  appMessage: document.querySelector("#appMessage"),
   loginEmail: document.querySelector("#loginEmail"),
   loginPassword: document.querySelector("#loginPassword"),
   registerName: document.querySelector("#registerName"),
@@ -254,6 +257,7 @@ forms.vehicle.addEventListener("submit", async (event) => {
   maintenancePlanDraftType = "";
   renderPresetPreview(true);
   await saveApp();
+  showAppMessage(`Vehiculo ${vehicle.name} creado correctamente.`, "success");
   render();
 });
 
@@ -261,9 +265,11 @@ forms.quickMileage.addEventListener("submit", async (event) => {
   event.preventDefault();
   const vehicleId = fields.quickMileageVehicle.value;
   await saveMileageRecord(vehicleId, fields.quickMileageDate.value, Number(fields.quickMileageValue.value));
+  const vehicle = currentData()?.vehicles.find((item) => item.id === vehicleId);
   forms.quickMileage.reset();
   fields.quickMileageVehicle.value = vehicleId;
   setTodayDefaults();
+  showAppMessage(`Kilometraje actualizado${vehicle ? ` para ${vehicle.name}` : ""}.`, "success");
   render();
 });
 
@@ -339,9 +345,11 @@ forms.maintenance.addEventListener("submit", async (event) => {
 
   forms.maintenance.reset();
   fields.maintenanceVehicle.value = vehicleId;
-  fields.maintenanceBatchMessage.textContent = "";
   setTodayDefaults();
   await saveApp();
+  const maintenanceMessage = `${selectedRows.length} mantencion${selectedRows.length === 1 ? "" : "es"} registrada${selectedRows.length === 1 ? "" : "s"} correctamente.`;
+  fields.maintenanceBatchMessage.textContent = maintenanceMessage;
+  showAppMessage(maintenanceMessage, "success");
   render();
 });
 
@@ -357,6 +365,7 @@ fields.resetData.addEventListener("click", async () => {
 
   user.data = structuredClone(emptyData);
   await saveApp();
+  showAppMessage("Tus datos fueron limpiados correctamente.", "success");
   render();
 });
 
@@ -509,6 +518,7 @@ fields.vehicleList.addEventListener("click", async (event) => {
   data.maintenance = data.maintenance.filter((item) => item.vehicleId !== vehicleId);
   data.maintenancePlans = data.maintenancePlans.filter((item) => item.vehicleId !== vehicleId);
   await saveApp();
+  showAppMessage(`${vehicle?.name || "Vehiculo"} eliminado correctamente.`, "success");
   render();
 });
 
@@ -804,6 +814,7 @@ function render() {
   renderMaintenancePlanSelection();
   renderHistoryFilterOptions();
   renderHistory();
+  renderAppMessage();
 }
 
 // Muestra los datos del perfil y el nombre de la sesion activa.
@@ -1242,6 +1253,7 @@ async function addPlanItemToVehicle() {
   fields.planNewNotes.value = "";
   fields.planEditMessage.textContent = "Mantencion agregada al plan.";
   await saveApp();
+  showAppMessage(`Mantencion ${type} agregada al plan.`, "success");
   renderMaintenancePlanEditor();
 }
 
@@ -1258,6 +1270,7 @@ async function deletePlanItem(planId) {
 
   data.maintenancePlans = data.maintenancePlans.filter((item) => item.id !== planId);
   await saveApp();
+  showAppMessage(`${plan?.type || "Mantencion"} eliminada del plan.`, "success");
   renderMaintenancePlanEditor();
 }
 
@@ -1291,6 +1304,7 @@ async function saveMaintenancePlanEdits() {
 
   await saveApp();
   fields.planEditMessage.textContent = "Plan actualizado correctamente.";
+  showAppMessage("Plan de mantencion actualizado correctamente.", "success");
   renderMaintenancePlanEditor();
   renderMaintenancePlanSelection();
   renderVehicles();
@@ -1326,6 +1340,7 @@ async function editVehicle(vehicleId, data) {
   });
 
   await saveApp();
+  showAppMessage(`Vehiculo ${vehicle.name} actualizado correctamente.`, "success");
   render();
 }
 
@@ -1531,6 +1546,7 @@ async function confirmOcrMileage() {
 
   await saveMileageRecord(vehicle.id, fields.quickMileageDate.value || today(), mileage);
   fields.quickMileageValue.value = mileage;
+  showAppMessage(`Kilometraje ${formatNumber(mileage)} km guardado correctamente.`, "success");
   renderOcrMessage(`Kilometraje ${formatNumber(mileage)} km guardado correctamente.`, "success");
   renderVehicleOptions();
   renderStats();
@@ -1627,6 +1643,7 @@ async function importCurrentUserData(file) {
     user.data = importedData;
     if (backup.user?.name) user.name = String(backup.user.name).trim() || user.name;
     await saveApp();
+    showAppMessage("Respaldo JSON cargado correctamente.", "success");
     render();
     window.alert("El respaldo se cargo correctamente.");
   } catch (error) {
@@ -1830,10 +1847,31 @@ function showAuthMessage(message) {
   fields.authMessage.textContent = message;
 }
 
+// Muestra un aviso temporal para operaciones realizadas dentro de la app.
+function showAppMessage(message, status = "success") {
+  appMessage = { message, status };
+  renderAppMessage();
+
+  if (appMessageTimeout) clearTimeout(appMessageTimeout);
+  appMessageTimeout = window.setTimeout(() => {
+    appMessage = null;
+    renderAppMessage();
+  }, 4500);
+}
+
+// Redibuja el aviso general sin interrumpir el flujo de trabajo.
+function renderAppMessage() {
+  if (!fields.appMessage) return;
+  fields.appMessage.textContent = appMessage?.message || "";
+  fields.appMessage.dataset.status = appMessage?.status || "";
+  fields.appMessage.classList.toggle("is-visible", Boolean(appMessage));
+}
+
 // Muestra problemas de sincronizacion con Supabase sin ocultarlos en consola.
 function showDataError(error) {
   const message = error?.message || "No se pudo sincronizar con Supabase.";
   console.error(error);
+  showAppMessage(`No se pudo guardar en la base de datos. ${message}`, "warning");
   window.alert(`No se pudo guardar en la base de datos. ${message}`);
 }
 
