@@ -74,14 +74,22 @@
           <p id="sessionSummary" class="session-summary"></p>
         </div>
         <div class="top-actions">
+          <button id="mobileMenuButton" class="mobile-menu-button" type="button" aria-controls="mainTabs" aria-expanded="false" aria-label="Abrir menú">
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
           <button id="logoutButton" class="ghost-button" type="button">Cerrar sesión</button>
         </div>
       </header>
 
-      <nav class="main-tabs" aria-label="Secciones principales">
+      <nav id="mainTabs" class="main-tabs" aria-label="Secciones principales">
         <button id="profileMainTab" class="main-tab" type="button" data-main-tab="profile">Perfil</button>
         <button id="vehiclesMainTab" class="main-tab is-active" type="button" data-main-tab="vehicles">Vehículos</button>
+        <button id="mobileVehicleCreateTab" class="main-tab mobile-sub-menu-tab" type="button">Crear vehículo</button>
+        <button id="mobileVehicleHistoryTab" class="main-tab mobile-sub-menu-tab" type="button">Histórico</button>
         <button id="maintenanceMainTab" class="main-tab" type="button" data-main-tab="maintenance">Mantenciones</button>
+        <button id="mobileLogoutButton" class="main-tab mobile-logout-tab" type="button">Cerrar sesión</button>
       </nav>
 
       <main class="app-content">

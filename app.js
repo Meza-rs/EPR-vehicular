@@ -82,8 +82,12 @@ const fields = {
   ownerName: document.querySelector("#ownerName"),
   ownerEmail: document.querySelector("#ownerEmail"),
   accountSummary: document.querySelector("#accountSummary"),
+  mainTabs: document.querySelector("#mainTabs"),
+  mobileMenuButton: document.querySelector("#mobileMenuButton"),
   profileMainTab: document.querySelector("#profileMainTab"),
   vehiclesMainTab: document.querySelector("#vehiclesMainTab"),
+  mobileVehicleCreateTab: document.querySelector("#mobileVehicleCreateTab"),
+  mobileVehicleHistoryTab: document.querySelector("#mobileVehicleHistoryTab"),
   maintenanceMainTab: document.querySelector("#maintenanceMainTab"),
   profileSection: document.querySelector("#profileSection"),
   vehiclesSection: document.querySelector("#vehiclesSection"),
@@ -143,6 +147,7 @@ const fields = {
   addPlanItem: document.querySelector("#addPlanItem"),
   planEditMessage: document.querySelector("#planEditMessage"),
   logoutButton: document.querySelector("#logoutButton"),
+  mobileLogoutButton: document.querySelector("#mobileLogoutButton"),
 };
 
 forms.register.addEventListener("submit", async (event) => {
@@ -355,12 +360,22 @@ forms.maintenance.addEventListener("submit", async (event) => {
   render();
 });
 
-fields.logoutButton.addEventListener("click", async () => {
+fields.mobileMenuButton.addEventListener("click", () => {
+  const isOpen = fields.mainTabs.classList.toggle("is-open");
+  fields.mobileMenuButton.classList.toggle("is-open", isOpen);
+  fields.mobileMenuButton.setAttribute("aria-expanded", String(isOpen));
+});
+
+fields.logoutButton.addEventListener("click", signOut);
+fields.mobileLogoutButton.addEventListener("click", signOut);
+
+async function signOut() {
   await supabase?.auth.signOut();
   app.currentUserId = null;
   app.users = [];
+  closeMobileMenu();
   render();
-});
+}
 
 fields.profileMainTab.addEventListener("click", () => {
   setMainTab("profile");
@@ -368,6 +383,18 @@ fields.profileMainTab.addEventListener("click", () => {
 
 fields.vehiclesMainTab.addEventListener("click", () => {
   setMainTab("vehicles");
+  setVehicleTab("summary");
+});
+
+fields.mobileVehicleCreateTab.addEventListener("click", () => {
+  setMainTab("vehicles");
+  setVehicleTab("create");
+  renderPresetPreview();
+});
+
+fields.mobileVehicleHistoryTab.addEventListener("click", () => {
+  setMainTab("vehicles");
+  setVehicleTab("history");
 });
 
 fields.maintenanceMainTab.addEventListener("click", () => {
@@ -942,9 +969,12 @@ function renderMaintenancePlanSelection() {
           <small>Próxima programada: ${formatNumber(plan.nextMileage)} km</small>
           ${plan.notes ? `<small class="plan-task-notes">${escapeHtml(plan.notes)}</small>` : ""}
         </span>
-        <span class="priority priority-${plan.priority.toLowerCase()}">${plan.priority}</span>
+        ${renderMaintenanceIcon(plan.type)}
         <span class="maintenance-schedule">
-          <strong class="remaining-km">${status.text}</strong>
+          <span class="maintenance-status-line">
+            <strong class="remaining-km">${status.text}</strong>
+            <span class="priority priority-${plan.priority.toLowerCase()}">${plan.priority}</span>
+          </span>
           <label>
             Próxima en km
             <input data-next-mileage data-interval-km="${plan.intervalKm}" type="number" min="0" step="1" value="${performedMileage + plan.intervalKm}" />
@@ -958,6 +988,212 @@ function renderMaintenancePlanSelection() {
     `;
   }).join("");
 }
+
+// Dibuja un icono lineal segun palabras clave del tipo de mantencion.
+function renderMaintenanceIcon(type) {
+  const icon = maintenanceIconForType(type);
+  return `
+    <span class="maintenance-icon-slot" title="${escapeHtml(icon.label)}" aria-label="${escapeHtml(icon.label)}" role="img">
+      ${icon.svg}
+    </span>
+  `;
+}
+
+// Escoge una categoria visual para la mantencion sin cambiar los datos guardados.
+function maintenanceIconForType(type) {
+  const text = normalizeSearchText(type);
+  const matches = (keywords) => keywords.some((keyword) => text.includes(keyword));
+
+  if (matches(["lubricacion", "lubricar", "cadena"])) {
+    if (matches(["limpieza", "limpiar", "lubricacion", "lubricar"])) return maintenanceIcons.chainOil;
+    return maintenanceIcons.chain;
+  }
+  if (matches(["aceite", "lubricante"])) return maintenanceIcons.oil;
+  if (matches(["filtro", "polen", "aire"])) return maintenanceIcons.filter;
+  if (matches(["bujia", "encendido"])) return maintenanceIcons.sparkPlug;
+  if (matches(["neumatico", "neumaticos", "rueda", "rotacion"])) return maintenanceIcons.tire;
+  if (matches(["freno", "frenos", "pastilla", "disco"])) return maintenanceIcons.brake;
+  if (matches(["bateria", "alternador"])) return maintenanceIcons.battery;
+  if (matches(["luz", "luces", "faro", "ampolleta"])) return maintenanceIcons.light;
+  if (matches(["transmision", "embrague", "cardan", "arrastre"])) return maintenanceIcons.transmission;
+  if (matches(["documentacion", "revision tecnica", "permiso", "seguro"])) return maintenanceIcons.document;
+  if (matches(["revision", "inspeccion", "general", "control"])) return maintenanceIcons.checklist;
+  return maintenanceIcons.general;
+}
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+const maintenanceIcons = {
+  chain: {
+    label: "Cadena",
+    svg: `
+      <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+        <path d="M18 17l-4 4a7 7 0 0 0 10 10l4-4" />
+        <path d="M30 31l4-4a7 7 0 0 0-10-10l-4 4" />
+        <path d="M18.5 29.5l11-11" />
+        <path d="M34 12v7h7" />
+      </svg>
+    `,
+  },
+  chainOil: {
+    label: "Cadena con lubricacion",
+    svg: `
+      <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+        <path d="M16 20l-3 3a6 6 0 0 0 8.5 8.5l3-3" />
+        <path d="M27.5 31.5l3-3A6 6 0 0 0 22 20l-3 3" />
+        <path d="M18 30l12-12" />
+        <path d="M36 11c3 4 5 6.5 5 9a5 5 0 0 1-10 0c0-2.5 2-5 5-9z" />
+      </svg>
+    `,
+  },
+  oil: {
+    label: "Aceite",
+    svg: `
+      <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+        <path d="M17 18h13l7 7-4 9H18l-5-7z" />
+        <path d="M20 14h8" />
+        <path d="M27 18v-4" />
+        <path d="M36 34c3 3 5 5.5 5 8a5 5 0 0 1-10 0c0-2.5 2-5 5-8z" />
+      </svg>
+    `,
+  },
+  filter: {
+    label: "Filtro",
+    svg: `
+      <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+        <rect x="14" y="12" width="20" height="24" rx="3" />
+        <path d="M19 17v14" />
+        <path d="M24 17v14" />
+        <path d="M29 17v14" />
+        <path d="M6 18h5" />
+        <path d="M6 30h5" />
+        <path d="M37 18h5" />
+        <path d="M37 30h5" />
+      </svg>
+    `,
+  },
+  sparkPlug: {
+    label: "Bujia",
+    svg: `
+      <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+        <path d="M20 8h12l-2 10H22z" />
+        <path d="M23 18h6v10l-3 5-3-5z" />
+        <path d="M20 23h12" />
+        <path d="M19 27h14" />
+        <path d="M26 33v7" />
+        <path d="M21 40h10" />
+        <path d="M35 12l5-4" />
+        <path d="M37 19h6" />
+      </svg>
+    `,
+  },
+  tire: {
+    label: "Neumatico",
+    svg: `
+      <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+        <circle cx="24" cy="24" r="15" />
+        <circle cx="24" cy="24" r="7" />
+        <path d="M24 9v8" />
+        <path d="M24 31v8" />
+        <path d="M9 24h8" />
+        <path d="M31 24h8" />
+        <path d="M14 14l6 6" />
+        <path d="M28 28l6 6" />
+      </svg>
+    `,
+  },
+  brake: {
+    label: "Frenos",
+    svg: `
+      <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+        <circle cx="24" cy="24" r="13" />
+        <circle cx="24" cy="24" r="4" />
+        <path d="M36 13c4 3 6 7 6 11s-2 8-6 11" />
+        <path d="M31 16a10 10 0 0 1 0 16" />
+        <path d="M18 16l12 16" />
+      </svg>
+    `,
+  },
+  battery: {
+    label: "Bateria",
+    svg: `
+      <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+        <rect x="9" y="16" width="28" height="18" rx="3" />
+        <path d="M37 21h3a3 3 0 0 1 3 3v2a3 3 0 0 1-3 3h-3" />
+        <path d="M16 25h8" />
+        <path d="M20 21v8" />
+        <path d="M29 25h5" />
+      </svg>
+    `,
+  },
+  light: {
+    label: "Luces",
+    svg: `
+      <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+        <path d="M20 10a10 10 0 0 0-6 18v5h12v-5a10 10 0 0 0-6-18z" />
+        <path d="M16 38h8" />
+        <path d="M17 43h6" />
+        <path d="M33 16h8" />
+        <path d="M33 24h10" />
+        <path d="M33 32h8" />
+      </svg>
+    `,
+  },
+  checklist: {
+    label: "Revision general",
+    svg: `
+      <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+        <rect x="14" y="8" width="22" height="32" rx="3" />
+        <path d="M19 18l3 3 5-6" />
+        <path d="M19 29l3 3 5-6" />
+        <path d="M30 20h2" />
+        <path d="M30 31h2" />
+      </svg>
+    `,
+  },
+  transmission: {
+    label: "Transmision",
+    svg: `
+      <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+        <circle cx="24" cy="24" r="7" />
+        <path d="M24 8v6" />
+        <path d="M24 34v6" />
+        <path d="M8 24h6" />
+        <path d="M34 24h6" />
+        <path d="M12.5 12.5l4.5 4.5" />
+        <path d="M31 31l4.5 4.5" />
+        <path d="M35.5 12.5L31 17" />
+        <path d="M17 31l-4.5 4.5" />
+      </svg>
+    `,
+  },
+  document: {
+    label: "Documentacion",
+    svg: `
+      <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+        <path d="M15 7h14l6 6v28H15z" />
+        <path d="M29 7v7h6" />
+        <path d="M20 24l3 3 6-7" />
+        <path d="M20 34h10" />
+      </svg>
+    `,
+  },
+  general: {
+    label: "Mantencion general",
+    svg: `
+      <svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+        <path d="M31 10a8 8 0 0 0 7 10L22 36a6 6 0 0 1-8-8l16-16a8 8 0 0 0 1-2z" />
+        <path d="M14 34l-5 5" />
+        <path d="M28 24l-4-4" />
+      </svg>
+    `,
+  },
+};
 
 // Muestra el kilometraje actual del vehiculo seleccionado en el formulario de mantenciones.
 function renderMaintenanceCurrentMileageNote() {
@@ -1744,6 +1980,14 @@ function setMainTab(tabName) {
   fields.profileSection.classList.toggle("is-hidden", !isProfile);
   fields.vehiclesSection.classList.toggle("is-hidden", !isVehicles);
   fields.maintenanceSection.classList.toggle("is-hidden", !isMaintenance);
+  closeMobileMenu();
+}
+
+// Cierra el desplegable superior usado en movil.
+function closeMobileMenu() {
+  fields.mainTabs.classList.remove("is-open");
+  fields.mobileMenuButton.classList.remove("is-open");
+  fields.mobileMenuButton.setAttribute("aria-expanded", "false");
 }
 
 // Cambia entre las vistas internas de la seccion Vehiculos.
