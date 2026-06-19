@@ -14,8 +14,8 @@
     <section id="authScreen" class="auth-screen">
       <div class="auth-intro">
         <p class="eyebrow">ERP personal</p>
-        <h1>Control de vehiculos por usuario</h1>
-        <p class="lead">Crea una cuenta local o entra para ver solo tus vehiculos, kilometrajes y mantenciones.</p>
+        <h1>Control de vehículos por usuario</h1>
+        <p class="lead">Crea una cuenta o entra para ver solo tus vehículos, kilometrajes y mantenciones.</p>
       </div>
 
       <div class="auth-grid">
@@ -23,7 +23,7 @@
           <div class="panel-header">
             <div>
               <p class="eyebrow">Entrar</p>
-              <h2>Iniciar sesion</h2>
+              <h2>Iniciar sesión</h2>
             </div>
           </div>
           <form id="loginForm" class="form-grid single">
@@ -70,21 +70,17 @@
       <header class="topbar">
         <div>
           <p class="eyebrow">ERP personal</p>
-          <h1>Mis vehiculos</h1>
+          <h1>Mis vehículos</h1>
           <p id="sessionSummary" class="session-summary"></p>
         </div>
         <div class="top-actions">
-          <button id="exportData" class="ghost-button" type="button">Exportar JSON</button>
-          <button id="importData" class="ghost-button" type="button">Cargar JSON</button>
-          <input id="importDataFile" class="visually-hidden" type="file" accept="application/json,.json" />
-          <button id="resetData" class="ghost-button" type="button">Limpiar mis datos</button>
-          <button id="logoutButton" class="ghost-button" type="button">Cerrar sesion</button>
+          <button id="logoutButton" class="ghost-button" type="button">Cerrar sesión</button>
         </div>
       </header>
 
       <nav class="main-tabs" aria-label="Secciones principales">
         <button id="profileMainTab" class="main-tab" type="button" data-main-tab="profile">Perfil</button>
-        <button id="vehiclesMainTab" class="main-tab is-active" type="button" data-main-tab="vehicles">Vehiculos</button>
+        <button id="vehiclesMainTab" class="main-tab is-active" type="button" data-main-tab="vehicles">Vehículos</button>
         <button id="maintenanceMainTab" class="main-tab" type="button" data-main-tab="maintenance">Mantenciones</button>
       </nav>
 
@@ -115,23 +111,23 @@
         </section>
 
         <section id="vehiclesSection" class="main-panel">
-          <div class="sub-tabs" role="tablist" aria-label="Vistas de vehiculos">
+          <div class="sub-tabs" role="tablist" aria-label="Vistas de vehículos">
             <button id="vehicleSummaryTab" class="sub-tab is-active" type="button">Principal</button>
-            <button id="vehicleCreateTab" class="sub-tab" type="button">Crear vehiculo</button>
-            <button id="vehicleHistoryTab" class="sub-tab" type="button">Historico</button>
+            <button id="vehicleCreateTab" class="sub-tab" type="button">Crear vehículo</button>
+            <button id="vehicleHistoryTab" class="sub-tab" type="button">Histórico</button>
           </div>
 
           <div id="vehicleSummaryPanel" class="section-grid">
             <section class="panel wide">
               <div class="panel-header">
                 <div>
-                  <p class="eyebrow">Actualizacion</p>
+                  <p class="eyebrow">Actualización</p>
                   <h2>Kilometraje actual</h2>
                 </div>
               </div>
               <form id="quickMileageForm" class="quick-mileage-grid">
                 <label>
-                  Vehiculo
+                  Vehículo
                   <select id="quickMileageVehicle" required></select>
                 </label>
                 <label>
@@ -186,7 +182,7 @@
               <div class="panel-header">
                 <div>
                   <p class="eyebrow">Paso 2</p>
-                  <h2>Crear vehiculo</h2>
+                  <h2>Crear vehículo</h2>
                 </div>
               </div>
               <form id="vehicleForm" class="form-grid">
@@ -214,8 +210,8 @@
                 <div class="preset-editor full">
                   <div class="preset-editor-header">
                     <div>
-                      <strong>Plan de mantencion</strong>
-                      <small>Selecciona y ajusta las mantenciones que necesita este vehiculo.</small>
+                      <strong>Plan de mantención</strong>
+                      <small>Selecciona y ajusta las mantenciones que necesita este vehículo.</small>
                     </div>
                     <label class="select-all-toggle">
                       <input id="selectAllMaintenance" type="checkbox" checked />
@@ -225,7 +221,7 @@
                   <div id="maintenancePresetPreview" class="preset-preview"></div>
                   <div class="custom-maintenance-row">
                     <label>
-                      Nueva mantencion
+                      Nueva mantención
                       <input id="customMaintenanceName" type="text" placeholder="Ej: Revision de cardan" />
                     </label>
                     <label>
@@ -243,7 +239,7 @@
                     <button id="addCustomMaintenance" class="ghost-button" type="button">Agregar</button>
                   </div>
                 </div>
-                <button type="submit">Agregar vehiculo</button>
+                <button type="submit">Agregar vehículo</button>
               </form>
             </section>
           </div>
@@ -252,17 +248,17 @@
             <section class="dashboard">
               <div class="dashboard-header">
                 <div>
-                  <p class="eyebrow">Historico</p>
+                  <p class="eyebrow">Histórico</p>
                   <h2>Historial completo</h2>
                 </div>
               </div>
               <div class="history-filters">
                 <label>
-                  Vehiculo
+                  Vehículo
                   <select id="historyVehicle"></select>
                 </label>
                 <label>
-                  Tipo de mantencion
+                  Tipo de mantención
                   <select id="historyMaintenanceFilter">
                     <option value="">Todas las mantenciones</option>
                   </select>
@@ -276,7 +272,7 @@
             <section class="dashboard">
               <div class="dashboard-header plan-editor-heading">
                 <div>
-                  <p class="eyebrow">Plan de mantencion</p>
+                  <p class="eyebrow">Plan de mantención</p>
                   <h2 id="planEditorVehicleName">Modificar plan</h2>
                 </div>
                 <button id="backToVehicleSummary" class="ghost-button" type="button">Volver al resumen</button>
@@ -284,7 +280,7 @@
               <form id="maintenancePlanEditForm" class="plan-edit-form">
                 <div id="maintenancePlanEditList" class="plan-edit-list"></div>
                 <div class="plan-add-section">
-                  <h3>Agregar mantencion</h3>
+                  <h3>Agregar mantención</h3>
                   <div class="plan-add-grid">
                     <label>
                       Nombre
@@ -328,7 +324,7 @@
               <form id="maintenanceForm" class="maintenance-batch-form">
                 <div class="maintenance-batch-fields">
                 <label>
-                  Vehiculo
+                  Vehículo
                   <select id="maintenanceVehicle" required></select>
                 </label>
                 <label>
@@ -340,10 +336,11 @@
                   <input id="maintenanceMileage" type="number" min="0" step="1" placeholder="Ej: 50000" required />
                 </label>
                 </div>
+                <p id="maintenanceCurrentMileage" class="current-mileage-note"></p>
                 <div class="maintenance-selection-header">
                   <div>
                     <strong>Selecciona lo realizado</strong>
-                    <small>Ordenado por kilometros faltantes y prioridad.</small>
+                    <small>Ordenado por kilómetros faltantes y prioridad.</small>
                   </div>
                   <label class="select-all-toggle">
                     <input id="selectAllPerformedMaintenance" type="checkbox" />
@@ -365,13 +362,24 @@
     </div>
 
     <script type="module" src="/app.js"></script>
-    <script>
-      if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    <script type="module">
+      if (import.meta.env.PROD && "serviceWorker" in navigator && location.protocol !== "file:") {
         window.addEventListener("load", () => {
           navigator.serviceWorker.register("/sw.js").catch(() => {
             console.warn("No se pudo registrar el modo instalable.");
           });
         });
+      } else if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          registrations.forEach((registration) => registration.unregister());
+        });
+        if ("caches" in window) {
+          caches.keys().then((keys) => {
+            keys
+              .filter((key) => key.startsWith("erp-vehicular"))
+              .forEach((key) => caches.delete(key));
+          });
+        }
       }
     </script>
   </body>

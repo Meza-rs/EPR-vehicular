@@ -2,7 +2,6 @@ import { createClient } from "@supabase/supabase-js";
 import { inject } from "@vercel/analytics";
 
 const STORAGE_KEY = "erpVehicularPersonal";
-const BACKUP_VERSION = 1;
 const TESSERACT_CDN_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -122,6 +121,7 @@ const fields = {
   maintenanceVehicle: document.querySelector("#maintenanceVehicle"),
   maintenanceDate: document.querySelector("#maintenanceDate"),
   maintenanceMileage: document.querySelector("#maintenanceMileage"),
+  maintenanceCurrentMileage: document.querySelector("#maintenanceCurrentMileage"),
   maintenanceNotes: document.querySelector("#maintenanceNotes"),
   selectAllPerformedMaintenance: document.querySelector("#selectAllPerformedMaintenance"),
   maintenancePlanSelection: document.querySelector("#maintenancePlanSelection"),
@@ -142,10 +142,6 @@ const fields = {
   planNewNotes: document.querySelector("#planNewNotes"),
   addPlanItem: document.querySelector("#addPlanItem"),
   planEditMessage: document.querySelector("#planEditMessage"),
-  exportData: document.querySelector("#exportData"),
-  importData: document.querySelector("#importData"),
-  importDataFile: document.querySelector("#importDataFile"),
-  resetData: document.querySelector("#resetData"),
   logoutButton: document.querySelector("#logoutButton"),
 };
 
@@ -258,6 +254,9 @@ forms.vehicle.addEventListener("submit", async (event) => {
   renderPresetPreview(true);
   await saveApp();
   showAppMessage(`Vehiculo ${vehicle.name} creado correctamente.`, "success");
+  fields.quickMileageVehicle.value = vehicle.id;
+  setMainTab("vehicles");
+  setVehicleTab("summary");
   render();
 });
 
@@ -277,7 +276,7 @@ fields.dashboardPhotoButton.addEventListener("click", () => {
   const data = currentData();
   const vehicle = selectedSummaryVehicle(data);
   if (!vehicle) {
-    renderOcrMessage("Agrega o selecciona un vehiculo antes de tomar la foto.", "warning");
+    renderOcrMessage("Agrega o selecciona un vehículo antes de tomar la foto.", "warning");
     return;
   }
 
@@ -317,7 +316,7 @@ forms.maintenance.addEventListener("submit", async (event) => {
   const selectedRows = [...fields.maintenancePlanSelection.querySelectorAll("[data-maintenance-plan]")]
     .filter((row) => row.querySelector("[data-performed]").checked);
   if (selectedRows.length === 0) {
-    fields.maintenanceBatchMessage.textContent = "Selecciona al menos una mantencion realizada.";
+    fields.maintenanceBatchMessage.textContent = "Selecciona al menos una mantención realizada.";
     return;
   }
 
@@ -347,41 +346,13 @@ forms.maintenance.addEventListener("submit", async (event) => {
   fields.maintenanceVehicle.value = vehicleId;
   setTodayDefaults();
   await saveApp();
-  const maintenanceMessage = `${selectedRows.length} mantencion${selectedRows.length === 1 ? "" : "es"} registrada${selectedRows.length === 1 ? "" : "s"} correctamente.`;
+  const maintenanceMessage = `${selectedRows.length} mantención${selectedRows.length === 1 ? "" : "es"} registrada${selectedRows.length === 1 ? "" : "s"} correctamente.`;
   fields.maintenanceBatchMessage.textContent = maintenanceMessage;
   showAppMessage(maintenanceMessage, "success");
+  fields.quickMileageVehicle.value = vehicleId;
+  setMainTab("vehicles");
+  setVehicleTab("summary");
   render();
-});
-
-fields.resetData.addEventListener("click", async () => {
-  const user = currentUser();
-  if (!user) return;
-
-  const shouldReset = confirmDeletion(
-    "Limpiar todos mis datos",
-    "Se eliminaran permanentemente todos tus vehiculos, kilometrajes, planes de mantencion e historial de trabajos. Tu cuenta se conservara. Esta accion no se puede deshacer.",
-  );
-  if (!shouldReset) return;
-
-  user.data = structuredClone(emptyData);
-  await saveApp();
-  showAppMessage("Tus datos fueron limpiados correctamente.", "success");
-  render();
-});
-
-fields.exportData.addEventListener("click", () => {
-  exportCurrentUserData();
-});
-
-fields.importData.addEventListener("click", () => {
-  fields.importDataFile.value = "";
-  fields.importDataFile.click();
-});
-
-fields.importDataFile.addEventListener("change", async () => {
-  const file = fields.importDataFile.files?.[0];
-  if (!file) return;
-  await importCurrentUserData(file);
 });
 
 fields.logoutButton.addEventListener("click", async () => {
@@ -455,10 +426,12 @@ fields.maintenanceVehicle.addEventListener("change", () => {
   const data = currentData();
   const vehicle = data?.vehicles.find((item) => item.id === fields.maintenanceVehicle.value);
   fields.maintenanceMileage.value = vehicle ? getCurrentMileage(vehicle, data) : "";
+  renderMaintenanceCurrentMileageNote();
   renderMaintenancePlanSelection();
 });
 
 fields.maintenanceMileage.addEventListener("input", () => {
+  renderMaintenanceCurrentMileageNote();
   updateSuggestedNextMileages();
 });
 
@@ -508,8 +481,8 @@ fields.vehicleList.addEventListener("click", async (event) => {
   const mileageCount = data.mileage.filter((item) => item.vehicleId === vehicleId).length;
   const planCount = data.maintenancePlans.filter((item) => item.vehicleId === vehicleId).length;
   const shouldDelete = confirmDeletion(
-    `Eliminar ${vehicle?.name || "vehiculo"}`,
-    `Se perderan permanentemente este vehiculo, ${mileageCount} registros de kilometraje, ${maintenanceCount} mantenciones realizadas y ${planCount} tareas de su plan. Esta accion no se puede deshacer.`,
+    `Eliminar ${vehicle?.name || "vehículo"}`,
+    `Se perderán permanentemente este vehículo, ${mileageCount} registros de kilometraje, ${maintenanceCount} mantenciones realizadas y ${planCount} tareas de su plan. Esta acción no se puede deshacer.`,
   );
   if (!shouldDelete) return;
 
@@ -556,7 +529,7 @@ async function initApp() {
       await loadAuthenticatedUser(data.session.user);
     }
   } catch (error) {
-    showAuthMessage(`No se pudo cargar la sesion. ${error.message || ""}`.trim());
+    showAuthMessage(`No se pudo cargar la sesión. ${error.message || ""}`.trim());
   }
 
   render();
@@ -811,6 +784,7 @@ function render() {
   renderMaintenanceAlerts();
   renderVehicles();
   renderPresetPreview();
+  renderMaintenanceCurrentMileageNote();
   renderMaintenancePlanSelection();
   renderHistoryFilterOptions();
   renderHistory();
@@ -834,7 +808,7 @@ function renderVehicleOptions() {
   const options = data.vehicles
     .map((vehicle) => `<option value="${vehicle.id}">${escapeHtml(vehicle.name)}</option>`)
     .join("");
-  const placeholder = '<option value="" disabled selected>Agrega un vehiculo primero</option>';
+  const placeholder = '<option value="" disabled selected>Agrega un vehículo primero</option>';
 
   fields.quickMileageVehicle.innerHTML = options || placeholder;
   fields.maintenanceVehicle.innerHTML = options || placeholder;
@@ -864,7 +838,7 @@ function renderPresetPreview(forceReset = false) {
   }
 
   if (maintenancePlanDraft.length === 0) {
-    fields.maintenancePresetPreview.innerHTML = '<p class="muted">No hay mantenciones seleccionadas. Puedes agregar una mantencion personalizada abajo.</p>';
+    fields.maintenancePresetPreview.innerHTML = '<p class="muted">No hay mantenciones seleccionadas. Puedes agregar una mantención personalizada abajo.</p>';
     updateSelectAllState();
     return;
   }
@@ -876,10 +850,10 @@ function renderPresetPreview(forceReset = false) {
     <div class="preset-plan-list">
       ${maintenancePlanDraft.map((item) => `
         <div class="preset-plan-row" data-plan-id="${item.id}">
-          <input data-plan-selected type="checkbox" ${item.selected ? "checked" : ""} aria-label="Incluir mantencion" />
-          <input data-plan-name type="text" value="${escapeHtml(item.type)}" aria-label="Nombre de mantencion" />
+          <input data-plan-selected type="checkbox" ${item.selected ? "checked" : ""} aria-label="Incluir mantención" />
+          <input data-plan-name type="text" value="${escapeHtml(item.type)}" aria-label="Nombre de mantención" />
           <label class="interval-input">
-            <input data-plan-interval type="number" min="100" step="100" value="${item.intervalKm}" aria-label="Periodicidad en kilometros" />
+            <input data-plan-interval type="number" min="100" step="100" value="${item.intervalKm}" aria-label="Periodicidad en kilómetros" />
             <span>km</span>
           </label>
           <select data-plan-priority aria-label="Prioridad">
@@ -930,13 +904,15 @@ function renderMaintenancePlanSelection() {
   const vehicleId = fields.maintenanceVehicle.value;
   const vehicle = data.vehicles.find((item) => item.id === vehicleId);
   if (!vehicle) {
-    fields.maintenancePlanSelection.innerHTML = '<div class="empty">Selecciona un vehiculo con plan de mantencion.</div>';
+    fields.maintenanceCurrentMileage.textContent = "";
+    fields.maintenancePlanSelection.innerHTML = '<div class="empty">Selecciona un vehículo con plan de mantención.</div>';
     return;
   }
 
   if (!fields.maintenanceMileage.value) {
     fields.maintenanceMileage.value = getCurrentMileage(vehicle, data);
   }
+  renderMaintenanceCurrentMileageNote();
   const currentMileage = getCurrentMileage(vehicle, data);
   const performedMileage = Number(fields.maintenanceMileage.value) || currentMileage;
   const plans = data.maintenancePlans
@@ -945,7 +921,7 @@ function renderMaintenancePlanSelection() {
     .sort((a, b) => a.remaining - b.remaining || priorityRank(a.priority) - priorityRank(b.priority));
 
   if (plans.length === 0) {
-    fields.maintenancePlanSelection.innerHTML = '<div class="empty">Este vehiculo no tiene mantenciones en su plan.</div>';
+    fields.maintenancePlanSelection.innerHTML = '<div class="empty">Este vehículo no tiene mantenciones en su plan.</div>';
     fields.selectAllPerformedMaintenance.checked = false;
     fields.selectAllPerformedMaintenance.disabled = true;
     return;
@@ -963,14 +939,14 @@ function renderMaintenancePlanSelection() {
         </label>
         <span class="performed-maintenance-name">
           <strong>${escapeHtml(plan.type)}</strong>
-          <small>Proxima programada: ${formatNumber(plan.nextMileage)} km</small>
+          <small>Próxima programada: ${formatNumber(plan.nextMileage)} km</small>
           ${plan.notes ? `<small class="plan-task-notes">${escapeHtml(plan.notes)}</small>` : ""}
         </span>
         <span class="priority priority-${plan.priority.toLowerCase()}">${plan.priority}</span>
         <span class="maintenance-schedule">
           <strong class="remaining-km">${status.text}</strong>
           <label>
-            Proxima en km
+            Próxima en km
             <input data-next-mileage data-interval-km="${plan.intervalKm}" type="number" min="0" step="1" value="${performedMileage + plan.intervalKm}" />
           </label>
         </span>
@@ -981,6 +957,25 @@ function renderMaintenancePlanSelection() {
       </div>
     `;
   }).join("");
+}
+
+// Muestra el kilometraje actual del vehiculo seleccionado en el formulario de mantenciones.
+function renderMaintenanceCurrentMileageNote() {
+  const data = currentData();
+  const vehicle = data?.vehicles.find((item) => item.id === fields.maintenanceVehicle.value);
+  if (!fields.maintenanceCurrentMileage) return;
+
+  if (!vehicle) {
+    fields.maintenanceCurrentMileage.textContent = "";
+    return;
+  }
+
+  const currentMileage = getCurrentMileage(vehicle, data);
+  const enteredMileage = Number(fields.maintenanceMileage.value || 0);
+  const suffix = enteredMileage && enteredMileage !== currentMileage
+    ? ` Km ingresado: ${formatNumber(enteredMileage)} km.`
+    : "";
+  fields.maintenanceCurrentMileage.textContent = `Kilometraje actual de ${vehicle.name}: ${formatNumber(currentMileage)} km.${suffix}`;
 }
 
 // Recalcula los proximos kilometrajes sugeridos al cambiar el km realizado.
@@ -1097,14 +1092,14 @@ function renderMaintenanceAlerts() {
 function renderVehicles() {
   const data = currentData();
   if (data.vehicles.length === 0) {
-    fields.vehicleList.innerHTML = '<div class="empty">Agrega tu primer vehiculo para comenzar el control.</div>';
+    fields.vehicleList.innerHTML = '<div class="empty">Agrega tu primer vehículo para comenzar el control.</div>';
     return;
   }
 
   const vehicle = selectedSummaryVehicle(data);
   fields.vehicleList.innerHTML = vehicle
     ? renderVehicleCard(vehicle, data)
-    : '<div class="empty">Selecciona un vehiculo para ver su resumen.</div>';
+    : '<div class="empty">Selecciona un vehículo para ver su resumen.</div>';
 }
 
 // Genera el contenido de una tarjeta con resumen, historial y plan.
@@ -1139,9 +1134,9 @@ function renderVehicleCard(vehicle, data) {
       </header>
       <div class="card-grid">
         <div class="mini-box"><span>Kilometraje actual</span><strong>${formatNumber(currentMileage)} km</strong></div>
-        <div class="mini-box"><span>Ultima mantencion</span><strong>${lastMaintenance ? formatDate(lastMaintenance.date) : "Pendiente"}</strong></div>
+        <div class="mini-box"><span>Última mantención</span><strong>${lastMaintenance ? formatDate(lastMaintenance.date) : "Pendiente"}</strong></div>
         <div class="mini-box maintenance-summary-box">
-          <span>Proxima mantencion</span>
+          <span>Próxima mantención</span>
           <strong>${maintenanceStatus.text}</strong>
           <small>${escapeHtml(maintenanceStatus.names)}</small>
         </div>
@@ -1170,7 +1165,7 @@ function renderMaintenancePlan(plan) {
         ${plan.notes ? `<small>${escapeHtml(plan.notes)}</small>` : ""}
       </div>
       <span class="priority priority-${plan.priority.toLowerCase()}">${plan.priority}</span>
-      <small>Proxima: ${formatNumber(plan.nextMileage)} km</small>
+      <small>Próxima: ${formatNumber(plan.nextMileage)} km</small>
     </div>
   `;
 }
@@ -1218,13 +1213,13 @@ function renderMaintenancePlanEditor() {
           <button class="delete-button" data-delete-plan-item="${plan.id}" type="button">Eliminar</button>
         </div>
         <label>
-          Notas de esta mantencion
+          Notas de esta mantención
           <textarea data-edit-plan-notes rows="2" placeholder="Aceite, filtro, repuesto o especificacion recomendada...">${escapeHtml(plan.notes || "")}</textarea>
         </label>
-        <small>Proxima programada: ${formatNumber(plan.nextMileage)} km</small>
+        <small>Próxima programada: ${formatNumber(plan.nextMileage)} km</small>
       </article>
     `).join("")
-    : '<div class="empty">Este vehiculo no tiene mantenciones en su plan.</div>';
+    : '<div class="empty">Este vehículo no tiene mantenciones en su plan.</div>';
 }
 
 // Crea una tarea nueva dentro del plan del vehiculo seleccionado.
@@ -1263,8 +1258,8 @@ async function deletePlanItem(planId) {
   if (!data) return;
   const plan = data.maintenancePlans.find((item) => item.id === planId);
   const shouldDelete = confirmDeletion(
-    `Eliminar ${plan?.type || "mantencion"} del plan`,
-    "Esta tarea dejara de aparecer en los avisos y en la lista de mantenciones por realizar. Los trabajos ya registrados en el historial se conservaran. Esta accion no se puede deshacer.",
+    `Eliminar ${plan?.type || "mantención"} del plan`,
+    "Esta tarea dejará de aparecer en los avisos y en la lista de mantenciones por realizar. Los trabajos ya registrados en el historial se conservarán. Esta acción no se puede deshacer.",
   );
   if (!shouldDelete) return;
 
@@ -1304,7 +1299,7 @@ async function saveMaintenancePlanEdits() {
 
   await saveApp();
   fields.planEditMessage.textContent = "Plan actualizado correctamente.";
-  showAppMessage("Plan de mantencion actualizado correctamente.", "success");
+  showAppMessage("Plan de mantención actualizado correctamente.", "success");
   renderMaintenancePlanEditor();
   renderMaintenancePlanSelection();
   renderVehicles();
@@ -1315,10 +1310,10 @@ async function editVehicle(vehicleId, data) {
   const vehicle = data.vehicles.find((item) => item.id === vehicleId);
   if (!vehicle) return;
 
-  const name = prompt("Nombre del vehiculo", vehicle.name);
+  const name = prompt("Nombre del vehículo", vehicle.name);
   if (name === null) return;
 
-  const type = prompt("Tipo de vehiculo: Auto, Moto, Camioneta u Otro", vehicle.type);
+  const type = prompt("Tipo de vehículo: Auto, Moto, Camioneta u Otro", vehicle.type);
   if (type === null) return;
 
   const plate = prompt("Patente", vehicle.plate);
@@ -1433,7 +1428,7 @@ async function handleDashboardPhoto(file) {
   const data = currentData();
   const vehicle = selectedSummaryVehicle(data);
   if (!vehicle) {
-    renderOcrMessage("Selecciona un vehiculo antes de procesar la foto.", "warning");
+    renderOcrMessage("Selecciona un vehículo antes de procesar la foto.", "warning");
     return;
   }
 
@@ -1598,81 +1593,6 @@ function updateOcrWarning() {
     : "";
 }
 
-// Descarga un respaldo JSON versionado con todos los datos de la cuenta.
-function exportCurrentUserData() {
-  const user = currentUser();
-  if (!user) return;
-
-  const backup = {
-    app: "ERP Vehicular Personal",
-    version: BACKUP_VERSION,
-    exportedAt: new Date().toISOString(),
-    user: {
-      name: user.name,
-      email: user.email,
-    },
-    data: structuredClone(user.data),
-  };
-  const json = JSON.stringify(backup, null, 2);
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  const safeName = user.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "usuario";
-  link.href = url;
-  link.download = `erp-vehicular-${safeName}-${today()}.json`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
-}
-
-// Lee, valida y carga un respaldo JSON sobre la cuenta actual.
-async function importCurrentUserData(file) {
-  const user = currentUser();
-  if (!user) return;
-
-  try {
-    const backup = JSON.parse(await file.text());
-    const importedData = validateBackup(backup);
-    const shouldImport = confirmDeletion(
-      "Cargar respaldo JSON",
-      `Los datos actuales de esta cuenta seran reemplazados por ${importedData.vehicles.length} vehiculos, ${importedData.mileage.length} registros de kilometraje, ${importedData.maintenance.length} mantenciones y ${importedData.maintenancePlans.length} tareas de plan. Tu correo y password actuales se conservaran.`,
-    );
-    if (!shouldImport) return;
-
-    user.data = importedData;
-    if (backup.user?.name) user.name = String(backup.user.name).trim() || user.name;
-    await saveApp();
-    showAppMessage("Respaldo JSON cargado correctamente.", "success");
-    render();
-    window.alert("El respaldo se cargo correctamente.");
-  } catch (error) {
-    window.alert(`No se pudo cargar el respaldo. ${error.message || "El archivo JSON no es valido."}`);
-  }
-}
-
-// Comprueba que un respaldo tenga version y colecciones compatibles.
-function validateBackup(backup) {
-  if (!backup || typeof backup !== "object" || !backup.data || typeof backup.data !== "object") {
-    throw new Error("El archivo no corresponde a un respaldo de ERP Vehicular Personal.");
-  }
-  if (backup.version !== BACKUP_VERSION) {
-    throw new Error(`La version ${backup.version ?? "desconocida"} del respaldo no es compatible.`);
-  }
-
-  const keys = ["vehicles", "mileage", "maintenance", "maintenancePlans"];
-  keys.forEach((key) => {
-    if (!Array.isArray(backup.data[key])) throw new Error(`Falta la lista ${key} en el respaldo.`);
-  });
-
-  return {
-    vehicles: structuredClone(backup.data.vehicles),
-    mileage: structuredClone(backup.data.mileage),
-    maintenance: structuredClone(backup.data.maintenance),
-    maintenancePlans: structuredClone(backup.data.maintenancePlans),
-  };
-}
-
 // Registra un kilometraje y actualiza el odometro del vehiculo.
 async function saveMileageRecord(vehicleId, date, value) {
   const data = currentData();
@@ -1697,7 +1617,7 @@ async function saveMileageRecord(vehicleId, date, value) {
 function renderHistory() {
   const data = currentData();
   if (!data || data.vehicles.length === 0) {
-    fields.historyList.innerHTML = '<div class="empty">Agrega un vehiculo para revisar su historial.</div>';
+    fields.historyList.innerHTML = '<div class="empty">Agrega un vehículo para revisar su historial.</div>';
     return;
   }
 
@@ -1707,7 +1627,7 @@ function renderHistory() {
 
   const vehicle = data.vehicles.find((item) => item.id === fields.historyVehicle.value);
   if (!vehicle) {
-    fields.historyList.innerHTML = '<div class="empty">Selecciona un vehiculo.</div>';
+    fields.historyList.innerHTML = '<div class="empty">Selecciona un vehículo.</div>';
     return;
   }
 
@@ -1783,8 +1703,8 @@ function getNextMaintenanceGroup(vehicleId, data, currentMileage) {
 
 // Resume los kilometrajes realizado y proximo de una mantencion historica.
 function formatMaintenanceMileage(item) {
-  const maintenanceKm = item.mileage ? `${formatNumber(item.mileage)} km realizados` : "Km de mantencion no registrado";
-  const nextKm = item.nextMileage ? ` - proxima en ${formatNumber(item.nextMileage)} km` : "";
+  const maintenanceKm = item.mileage ? `${formatNumber(item.mileage)} km realizados` : "Km de mantención no registrado";
+  const nextKm = item.nextMileage ? ` - próxima en ${formatNumber(item.nextMileage)} km` : "";
   return `${maintenanceKm}${nextKm}`;
 }
 

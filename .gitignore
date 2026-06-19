@@ -7,3 +7,5 @@ android/
 .vercel-auth/
 .env
 erp-vehicular-*.json
+.agents/
+skills-lock.json

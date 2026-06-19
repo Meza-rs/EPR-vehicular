@@ -39,7 +39,6 @@ Subir el proyecto a Vercel, Netlify o GitHub Pages usando el comando de build `n
 3. Completar `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
 4. Ejecutar `supabase/schema.sql` en SQL Editor.
 5. En Authentication, revisar si quieres exigir confirmacion por correo. Para pruebas rapidas puedes desactivar confirmacion de email.
-6. Migrar datos usando el boton Cargar JSON desde un respaldo exportado.
 
 ## 4. Crear APK de prueba
 

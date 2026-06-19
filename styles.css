@@ -1,15 +1,16 @@
 :root {
   color-scheme: light;
-  --bg: #f4f6f3;
+  --bg: #f6f7fa;
   --surface: #ffffff;
-  --surface-strong: #eef3ef;
-  --text: #1d2520;
-  --muted: #69736d;
-  --line: #d8ded9;
+  --surface-strong: #f1f3f7;
+  --text: #111827;
+  --muted: #667085;
+  --line: #dde1ea;
   --accent: #2a3087;
   --accent-strong: #191f68;
   --warning: #b65d20;
-  --shadow: 0 12px 32px rgba(36, 54, 43, 0.1);
+  --danger: #b94124;
+  --shadow: 0 10px 24px rgba(17, 24, 39, 0.07);
 }
 
 * {
@@ -18,10 +19,11 @@
 
 body {
   margin: 0;
-  min-height: 100vh;
+  min-height: 100dvh;
   background: var(--bg);
   color: var(--text);
   font-family: Arial, Helvetica, sans-serif;
+  line-height: 1.5;
 }
 
 .is-hidden {
@@ -52,8 +54,9 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 8px clamp(16px, 2vw, 24px) 6px;
+  padding: 12px clamp(16px, 2vw, 24px) 10px;
   background: var(--surface);
+  border-bottom: 1px solid var(--line);
 }
 
 .auth-screen {
@@ -112,7 +115,8 @@ p {
 }
 
 h1 {
-  font-size: clamp(34px, 4vw, 46px);
+  font-size: clamp(30px, 4vw, 42px);
+  line-height: 1.08;
 }
 
 h2 {
@@ -145,7 +149,7 @@ h2 {
 
 .main-tab,
 .sub-tab {
-  min-height: 39px;
+  min-height: 42px;
   border-radius: 6px 6px 0 0;
   background: transparent;
   color: var(--muted);
@@ -235,6 +239,11 @@ h2 {
   background: #fff;
 }
 
+.performed-maintenance-row:has([data-performed]:checked) {
+  border-color: #bfc4ee;
+  background: #f4f5ff;
+}
+
 .performed-maintenance-row.is-overdue {
   border-left-color: #c24e2d;
   background: #fff7f4;
@@ -253,8 +262,8 @@ h2 {
 }
 
 .performed-check input {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   accent-color: var(--accent);
 }
 
@@ -352,6 +361,17 @@ h2 {
 
 .maintenance-batch-form > button {
   width: 100%;
+}
+
+.current-mileage-note {
+  margin: -6px 0 6px;
+  padding: 10px 12px;
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: #f1f3ff;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .sub-tabs {
@@ -535,7 +555,7 @@ input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(31, 122, 90, 0.14);
+  box-shadow: 0 0 0 3px rgba(42, 48, 135, 0.16);
 }
 
 .full {
@@ -543,7 +563,7 @@ textarea:focus {
 }
 
 button {
-  min-height: 42px;
+  min-height: 44px;
   border: 0;
   border-radius: 6px;
   background: var(--accent);
@@ -554,6 +574,16 @@ button {
 
 button:hover {
   background: var(--accent-strong);
+}
+
+button:focus-visible,
+.main-tab:focus-visible,
+.sub-tab:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(42, 48, 135, 0.24);
+  outline-offset: 2px;
 }
 
 .form-grid button {
@@ -568,7 +598,7 @@ button:hover {
 }
 
 .ghost-button:hover {
-  background: #dfe8e1;
+  background: #e7eaf1;
 }
 
 .muted {
@@ -1014,7 +1044,7 @@ button:hover {
 .delete-button {
   min-height: 34px;
   background: #fff2eb;
-  color: var(--warning);
+  color: var(--danger);
   border: 1px solid #f0c8b4;
   padding: 0 10px;
 }
@@ -1083,13 +1113,84 @@ button:hover {
 }
 
 @media (max-width: 640px) {
+  .app-shell {
+    padding-bottom: calc(76px + env(safe-area-inset-bottom));
+  }
+
   .topbar {
     align-items: stretch;
     flex-direction: column;
+    gap: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    padding: 10px 14px;
+  }
+
+  .topbar h1 {
+    font-size: 24px;
+  }
+
+  .session-summary {
+    margin-top: 4px;
+    font-size: 13px;
   }
 
   .main-tabs {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--line);
+    border-bottom: 0;
+    box-shadow: 0 -8px 22px rgba(17, 24, 39, 0.08);
+  }
+
+  .main-tab {
+    min-height: 52px;
+    border-radius: 8px;
+    padding: 0 8px;
+    font-size: 13px;
+  }
+
+  .main-tab.is-active {
+    background: #eef0ff;
+    color: var(--accent);
+  }
+
+  .app-content {
+    padding: 14px 12px 22px;
+  }
+
+  .panel,
+  .dashboard {
+    padding: 14px;
+    border-radius: 8px;
+    box-shadow: none;
+  }
+
+  .sub-tabs {
+    gap: 6px;
     overflow-x: auto;
+    margin-bottom: 12px;
+    padding-bottom: 2px;
+  }
+
+  .sub-tab {
+    flex: 1 0 auto;
+    min-height: 42px;
+    border-radius: 8px;
+    white-space: nowrap;
+  }
+
+  .panel-header,
+  .dashboard-header {
+    margin-bottom: 12px;
   }
 
   .auth-grid {
@@ -1102,6 +1203,7 @@ button:hover {
 
   .top-actions button {
     flex: 1;
+    min-height: 40px;
   }
 
   .vehicle-card header,
@@ -1117,6 +1219,15 @@ button:hover {
   .history-filters,
   .card-grid {
     grid-template-columns: 1fr;
+  }
+
+  .stat {
+    min-height: auto;
+    padding: 12px;
+  }
+
+  .stat strong {
+    font-size: 23px;
   }
 
   .ocr-actions {
@@ -1148,6 +1259,11 @@ button:hover {
     grid-template-columns: 1fr;
   }
 
+  .performed-maintenance-row {
+    gap: 8px;
+    padding: 12px;
+  }
+
   .plan-note-field,
   .plan-add-grid button {
     grid-column: auto;
@@ -1170,10 +1286,16 @@ button:hover {
 
   .performed-check {
     justify-content: flex-start;
+    min-height: 34px;
   }
 
   .maintenance-schedule,
   .performed-cost {
     grid-column: auto;
+  }
+
+  .history-item {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

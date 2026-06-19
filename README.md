@@ -44,9 +44,7 @@ La carpeta de salida sera `dist`.
 - Desde el resumen de cada vehiculo permite abrir y modificar su plan de mantencion.
 - En el editor del plan se pueden cambiar nombres, periodicidad y prioridad, eliminar o crear tareas y guardar notas tecnicas para cada una.
 - Las notas del plan aparecen al registrar trabajos y se copian al historial de la mantencion realizada.
-- Antes de eliminar un vehiculo, una tarea del plan o limpiar todos los datos, la app muestra una confirmacion con la informacion que se perdera.
-- Permite exportar todos los datos de la cuenta activa a un respaldo JSON versionado.
-- Permite cargar un respaldo JSON validado, con confirmacion antes de reemplazar los datos actuales.
+- Antes de eliminar un vehiculo o una tarea del plan, la app muestra una confirmacion con la informacion que se perdera.
 - Edita datos basicos de cada vehiculo.
 - Registra kilometraje por vehiculo.
 - En Vehiculos > Principal muestra el resumen del vehiculo seleccionado en el actualizador de kilometraje.
