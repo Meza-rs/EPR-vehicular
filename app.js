@@ -69,10 +69,13 @@ const forms = {
 };
 
 const fields = {
+  bootScreen: document.querySelector("#bootScreen"),
   authScreen: document.querySelector("#authScreen"),
   appShell: document.querySelector("#appShell"),
   authMessage: document.querySelector("#authMessage"),
   appMessage: document.querySelector("#appMessage"),
+  updateNotice: document.querySelector("#updateNotice"),
+  reloadAppButton: document.querySelector("#reloadAppButton"),
   loginEmail: document.querySelector("#loginEmail"),
   loginPassword: document.querySelector("#loginPassword"),
   registerName: document.querySelector("#registerName"),
@@ -541,6 +544,18 @@ fields.maintenancePlanEditForm.addEventListener("submit", async (event) => {
   await saveMaintenancePlanEdits();
 });
 
+fields.reloadAppButton.addEventListener("click", () => {
+  window.location.reload();
+});
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    if (event.data?.type === "APP_VERSION_READY") {
+      showUpdateNotice();
+    }
+  });
+}
+
 // Inicia la app leyendo la sesion actual de Supabase.
 async function initApp() {
   if (!ensureSupabaseReady()) {
@@ -798,6 +813,7 @@ function currentData() {
 function render() {
   const user = currentUser();
 
+  fields.bootScreen.classList.add("is-hidden");
   fields.authScreen.classList.toggle("is-hidden", Boolean(user));
   fields.appShell.classList.toggle("is-hidden", !user);
 
@@ -2029,6 +2045,12 @@ function renderAppMessage() {
   fields.appMessage.textContent = appMessage?.message || "";
   fields.appMessage.dataset.status = appMessage?.status || "";
   fields.appMessage.classList.toggle("is-visible", Boolean(appMessage));
+}
+
+// Muestra un aviso cuando el PWA ya tiene una version nueva lista.
+function showUpdateNotice() {
+  if (!fields.updateNotice) return;
+  fields.updateNotice.classList.remove("is-hidden");
 }
 
 // Muestra problemas de sincronizacion con Supabase sin ocultarlos en consola.
