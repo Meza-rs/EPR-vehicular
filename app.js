@@ -1,5 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
+﻿import { createClient } from "@supabase/supabase-js";
 import { inject } from "@vercel/analytics";
+import { registerSW } from "virtual:pwa-register";
 
 const STORAGE_KEY = "erpVehicularPersonal";
 const TESSERACT_CDN_URL = "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
@@ -58,6 +59,8 @@ let ocrPreviewUrl = "";
 let saveQueue = Promise.resolve();
 let appMessage = null;
 let appMessageTimeout = null;
+let updateServiceWorker = null;
+let updateAvailable = false;
 
 const forms = {
   login: document.querySelector("#loginForm"),
@@ -66,6 +69,7 @@ const forms = {
   vehicle: document.querySelector("#vehicleForm"),
   quickMileage: document.querySelector("#quickMileageForm"),
   maintenance: document.querySelector("#maintenanceForm"),
+  corrective: document.querySelector("#correctiveForm"),
 };
 
 const fields = {
@@ -76,6 +80,9 @@ const fields = {
   appMessage: document.querySelector("#appMessage"),
   updateNotice: document.querySelector("#updateNotice"),
   reloadAppButton: document.querySelector("#reloadAppButton"),
+  offlineNotice: document.querySelector("#offlineNotice"),
+  refreshAppButton: document.querySelector("#refreshAppButton"),
+  mobileRefreshAppButton: document.querySelector("#mobileRefreshAppButton"),
   loginEmail: document.querySelector("#loginEmail"),
   loginPassword: document.querySelector("#loginPassword"),
   registerName: document.querySelector("#registerName"),
@@ -92,9 +99,11 @@ const fields = {
   mobileVehicleCreateTab: document.querySelector("#mobileVehicleCreateTab"),
   mobileVehicleHistoryTab: document.querySelector("#mobileVehicleHistoryTab"),
   maintenanceMainTab: document.querySelector("#maintenanceMainTab"),
+  correctiveMainTab: document.querySelector("#correctiveMainTab"),
   profileSection: document.querySelector("#profileSection"),
   vehiclesSection: document.querySelector("#vehiclesSection"),
   maintenanceSection: document.querySelector("#maintenanceSection"),
+  correctiveSection: document.querySelector("#correctiveSection"),
   vehicleSummaryTab: document.querySelector("#vehicleSummaryTab"),
   vehicleCreateTab: document.querySelector("#vehicleCreateTab"),
   vehicleHistoryTab: document.querySelector("#vehicleHistoryTab"),
@@ -133,6 +142,16 @@ const fields = {
   selectAllPerformedMaintenance: document.querySelector("#selectAllPerformedMaintenance"),
   maintenancePlanSelection: document.querySelector("#maintenancePlanSelection"),
   maintenanceBatchMessage: document.querySelector("#maintenanceBatchMessage"),
+  correctiveVehicle: document.querySelector("#correctiveVehicle"),
+  correctiveMileage: document.querySelector("#correctiveMileage"),
+  correctiveDate: document.querySelector("#correctiveDate"),
+  correctiveCategory: document.querySelector("#correctiveCategory"),
+  correctiveOtherLabel: document.querySelector("#correctiveOtherLabel"),
+  correctiveOtherCategory: document.querySelector("#correctiveOtherCategory"),
+  correctiveDescription: document.querySelector("#correctiveDescription"),
+  correctiveCost: document.querySelector("#correctiveCost"),
+  correctiveNotes: document.querySelector("#correctiveNotes"),
+  correctiveMessage: document.querySelector("#correctiveMessage"),
   stats: document.querySelector("#stats"),
   maintenanceAlerts: document.querySelector("#maintenanceAlerts"),
   historyVehicle: document.querySelector("#historyVehicle"),
@@ -156,6 +175,7 @@ const fields = {
 forms.register.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!ensureSupabaseReady()) return;
+  if (!ensureOnlineForWrite("crear una cuenta")) return;
 
   const name = fields.registerName.value.trim();
   const email = normalizeEmail(fields.registerEmail.value);
@@ -188,6 +208,7 @@ forms.register.addEventListener("submit", async (event) => {
 forms.login.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!ensureSupabaseReady()) return;
+  if (!ensureOnlineForWrite("iniciar sesiÃ³n")) return;
 
   const email = normalizeEmail(fields.loginEmail.value);
   const password = fields.loginPassword.value;
@@ -206,6 +227,7 @@ forms.login.addEventListener("submit", async (event) => {
 
 forms.account.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!ensureOnlineForWrite("actualizar el perfil")) return;
   const user = currentUser();
   if (!user) return;
 
@@ -234,6 +256,7 @@ forms.account.addEventListener("submit", async (event) => {
 
 forms.vehicle.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!ensureOnlineForWrite("crear un vehÃ­culo")) return;
   const data = currentData();
   if (!data) return;
 
@@ -270,6 +293,7 @@ forms.vehicle.addEventListener("submit", async (event) => {
 
 forms.quickMileage.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!ensureOnlineForWrite("actualizar kilometraje")) return;
   const vehicleId = fields.quickMileageVehicle.value;
   await saveMileageRecord(vehicleId, fields.quickMileageDate.value, Number(fields.quickMileageValue.value));
   const vehicle = currentData()?.vehicles.find((item) => item.id === vehicleId);
@@ -284,7 +308,7 @@ fields.dashboardPhotoButton.addEventListener("click", () => {
   const data = currentData();
   const vehicle = selectedSummaryVehicle(data);
   if (!vehicle) {
-    renderOcrMessage("Agrega o selecciona un vehículo antes de tomar la foto.", "warning");
+    renderOcrMessage("Agrega o selecciona un vehÃ­culo antes de tomar la foto.", "warning");
     return;
   }
 
@@ -313,18 +337,20 @@ fields.ocrMileageValue.addEventListener("input", () => {
 });
 
 fields.confirmOcrMileage.addEventListener("click", async () => {
+  if (!ensureOnlineForWrite("guardar el kilometraje detectado")) return;
   await confirmOcrMileage();
 });
 
 forms.maintenance.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!ensureOnlineForWrite("registrar mantenciones")) return;
   const data = currentData();
   if (!data) return;
 
   const selectedRows = [...fields.maintenancePlanSelection.querySelectorAll("[data-maintenance-plan]")]
     .filter((row) => row.querySelector("[data-performed]").checked);
   if (selectedRows.length === 0) {
-    fields.maintenanceBatchMessage.textContent = "Selecciona al menos una mantención realizada.";
+    fields.maintenanceBatchMessage.textContent = "Selecciona al menos una mantenciÃ³n realizada.";
     return;
   }
 
@@ -354,9 +380,54 @@ forms.maintenance.addEventListener("submit", async (event) => {
   fields.maintenanceVehicle.value = vehicleId;
   setTodayDefaults();
   await saveApp();
-  const maintenanceMessage = `${selectedRows.length} mantención${selectedRows.length === 1 ? "" : "es"} registrada${selectedRows.length === 1 ? "" : "s"} correctamente.`;
+  const maintenanceMessage = `${selectedRows.length} mantenciÃ³n${selectedRows.length === 1 ? "" : "es"} registrada${selectedRows.length === 1 ? "" : "s"} correctamente.`;
   fields.maintenanceBatchMessage.textContent = maintenanceMessage;
   showAppMessage(maintenanceMessage, "success");
+  fields.quickMileageVehicle.value = vehicleId;
+  setMainTab("vehicles");
+  setVehicleTab("summary");
+  render();
+});
+
+forms.corrective.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!ensureOnlineForWrite("registrar una reparacion correctiva")) return;
+  const data = currentData();
+  if (!data) return;
+
+  const vehicle = data.vehicles.find((item) => item.id === fields.correctiveVehicle.value);
+  const category = fields.correctiveCategory.value === "Otro"
+    ? fields.correctiveOtherCategory.value.trim()
+    : fields.correctiveCategory.value;
+  const description = fields.correctiveDescription.value.trim();
+  const mileage = Number(fields.correctiveMileage.value || 0);
+
+  if (!vehicle || !category || !description || mileage <= 0) {
+    fields.correctiveMessage.textContent = "Selecciona un vehiculo, kilometraje, categoria y descripcion.";
+    return;
+  }
+
+  data.maintenance.push({
+    id: crypto.randomUUID(),
+    vehicleId: vehicle.id,
+    date: fields.correctiveDate.value,
+    type: `Correctiva - ${category}`,
+    mileage,
+    nextMileage: 0,
+    cost: Number(fields.correctiveCost.value || 0),
+    notes: [description, fields.correctiveNotes.value.trim()].filter(Boolean).join(" | "),
+  });
+
+  const vehicleId = vehicle.id;
+  forms.corrective.reset();
+  fields.correctiveVehicle.value = vehicleId;
+  fields.correctiveDate.value = today();
+  updateCorrectiveMileageDefault(true);
+  toggleCorrectiveOtherCategory();
+  await saveApp();
+  const message = "Reparacion correctiva registrada correctamente.";
+  fields.correctiveMessage.textContent = message;
+  showAppMessage(message, "success");
   fields.quickMileageVehicle.value = vehicleId;
   setMainTab("vehicles");
   setVehicleTab("summary");
@@ -403,6 +474,14 @@ fields.mobileVehicleHistoryTab.addEventListener("click", () => {
 fields.maintenanceMainTab.addEventListener("click", () => {
   setMainTab("maintenance");
 });
+
+fields.correctiveMainTab.addEventListener("click", () => {
+  setMainTab("corrective");
+  updateCorrectiveMileageDefault(true);
+});
+
+fields.correctiveCategory.addEventListener("change", toggleCorrectiveOtherCategory);
+fields.correctiveVehicle.addEventListener("change", () => updateCorrectiveMileageDefault(true));
 
 fields.vehicleSummaryTab.addEventListener("click", () => {
   setVehicleTab("summary");
@@ -486,12 +565,16 @@ fields.historyMaintenanceFilter.addEventListener("change", () => {
   renderHistory();
 });
 
+fields.vehicleList.addEventListener("click", toggleMaintenanceNote);
+fields.historyList.addEventListener("click", toggleMaintenanceNote);
+
 fields.vehicleList.addEventListener("click", async (event) => {
   const data = currentData();
   if (!data) return;
 
   const editButton = event.target.closest("[data-edit-vehicle]");
   if (editButton) {
+    if (!ensureOnlineForWrite("editar un vehÃ­culo")) return;
     await editVehicle(editButton.dataset.editVehicle, data);
     return;
   }
@@ -504,6 +587,7 @@ fields.vehicleList.addEventListener("click", async (event) => {
 
   const deleteButton = event.target.closest("[data-delete-vehicle]");
   if (!deleteButton) return;
+  if (!ensureOnlineForWrite("eliminar un vehÃ­culo")) return;
 
   const vehicleId = deleteButton.dataset.deleteVehicle;
   const vehicle = data.vehicles.find((item) => item.id === vehicleId);
@@ -511,8 +595,8 @@ fields.vehicleList.addEventListener("click", async (event) => {
   const mileageCount = data.mileage.filter((item) => item.vehicleId === vehicleId).length;
   const planCount = data.maintenancePlans.filter((item) => item.vehicleId === vehicleId).length;
   const shouldDelete = confirmDeletion(
-    `Eliminar ${vehicle?.name || "vehículo"}`,
-    `Se perderán permanentemente este vehículo, ${mileageCount} registros de kilometraje, ${maintenanceCount} mantenciones realizadas y ${planCount} tareas de su plan. Esta acción no se puede deshacer.`,
+    `Eliminar ${vehicle?.name || "vehÃ­culo"}`,
+    `Se perderÃ¡n permanentemente este vehÃ­culo, ${mileageCount} registros de kilometraje, ${maintenanceCount} mantenciones realizadas y ${planCount} tareas de su plan. Esta acciÃ³n no se puede deshacer.`,
   );
   if (!shouldDelete) return;
 
@@ -530,34 +614,56 @@ fields.backToVehicleSummary.addEventListener("click", () => {
 });
 
 fields.addPlanItem.addEventListener("click", async () => {
+  if (!ensureOnlineForWrite("agregar una mantenciÃ³n al plan")) return;
   await addPlanItemToVehicle();
 });
 
 fields.maintenancePlanEditList.addEventListener("click", async (event) => {
   const deleteButton = event.target.closest("[data-delete-plan-item]");
   if (!deleteButton) return;
+  if (!ensureOnlineForWrite("eliminar una mantenciÃ³n del plan")) return;
   await deletePlanItem(deleteButton.dataset.deletePlanItem);
 });
 
 fields.maintenancePlanEditForm.addEventListener("submit", async (event) => {
   event.preventDefault();
+  if (!ensureOnlineForWrite("guardar cambios del plan")) return;
   await saveMaintenancePlanEdits();
 });
 
-fields.reloadAppButton.addEventListener("click", () => {
-  window.location.reload();
+fields.reloadAppButton.addEventListener("click", refreshApp);
+fields.refreshAppButton.addEventListener("click", refreshApp);
+fields.mobileRefreshAppButton.addEventListener("click", () => {
+  closeMobileMenu();
+  refreshApp();
 });
 
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.addEventListener("message", (event) => {
-    if (event.data?.type === "APP_VERSION_READY") {
-      showUpdateNotice();
-    }
-  });
+window.addEventListener("online", updateConnectivityState);
+window.addEventListener("offline", updateConnectivityState);
+
+function refreshApp() {
+  if (updateAvailable && updateServiceWorker) {
+    updateServiceWorker(true);
+    return;
+  }
+  window.location.reload();
 }
+
+updateServiceWorker = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    updateAvailable = true;
+    showUpdateNotice();
+  },
+  onOfflineReady() {
+    showAppMessage("La app quedo lista para uso offline basico.", "success");
+  },
+});
 
 // Inicia la app leyendo la sesion actual de Supabase.
 async function initApp() {
+  updateConnectivityState();
+
   if (!ensureSupabaseReady()) {
     render();
     return;
@@ -571,7 +677,7 @@ async function initApp() {
       await loadAuthenticatedUser(data.session.user);
     }
   } catch (error) {
-    showAuthMessage(`No se pudo cargar la sesión. ${error.message || ""}`.trim());
+    showAuthMessage(`No se pudo cargar la sesiÃ³n. ${error.message || ""}`.trim());
   }
 
   render();
@@ -813,6 +919,7 @@ function currentData() {
 function render() {
   const user = currentUser();
 
+  updateConnectivityState();
   fields.bootScreen.classList.add("is-hidden");
   fields.authScreen.classList.toggle("is-hidden", Boolean(user));
   fields.appShell.classList.toggle("is-hidden", !user);
@@ -831,6 +938,8 @@ function render() {
   renderMaintenancePlanSelection();
   renderHistoryFilterOptions();
   renderHistory();
+  updateCorrectiveMileageDefault();
+  toggleCorrectiveOtherCategory();
   renderAppMessage();
 }
 
@@ -848,21 +957,25 @@ function renderVehicleOptions() {
   const selectedQuickVehicle = fields.quickMileageVehicle.value;
   const selectedMaintenanceVehicle = fields.maintenanceVehicle.value;
   const selectedHistoryVehicle = fields.historyVehicle.value;
+  const selectedCorrectiveVehicle = fields.correctiveVehicle.value;
   const options = data.vehicles
     .map((vehicle) => `<option value="${vehicle.id}">${escapeHtml(vehicle.name)}</option>`)
     .join("");
-  const placeholder = '<option value="" disabled selected>Agrega un vehículo primero</option>';
+  const placeholder = '<option value="" disabled selected>Agrega un vehÃ­culo primero</option>';
 
   fields.quickMileageVehicle.innerHTML = options || placeholder;
   fields.maintenanceVehicle.innerHTML = options || placeholder;
   fields.historyVehicle.innerHTML = options || placeholder;
+  fields.correctiveVehicle.innerHTML = options || placeholder;
   fields.quickMileageVehicle.disabled = data.vehicles.length === 0;
   fields.maintenanceVehicle.disabled = data.vehicles.length === 0;
   fields.historyVehicle.disabled = data.vehicles.length === 0;
+  fields.correctiveVehicle.disabled = data.vehicles.length === 0;
 
   keepSelectedVehicle(fields.quickMileageVehicle, selectedQuickVehicle, data);
   keepSelectedVehicle(fields.maintenanceVehicle, selectedMaintenanceVehicle, data);
   keepSelectedVehicle(fields.historyVehicle, selectedHistoryVehicle, data);
+  keepSelectedVehicle(fields.correctiveVehicle, selectedCorrectiveVehicle, data);
 }
 
 // Construye el plan sugerido editable al crear un vehiculo nuevo.
@@ -881,7 +994,7 @@ function renderPresetPreview(forceReset = false) {
   }
 
   if (maintenancePlanDraft.length === 0) {
-    fields.maintenancePresetPreview.innerHTML = '<p class="muted">No hay mantenciones seleccionadas. Puedes agregar una mantención personalizada abajo.</p>';
+    fields.maintenancePresetPreview.innerHTML = '<p class="muted">No hay mantenciones seleccionadas. Puedes agregar una mantenciÃ³n personalizada abajo.</p>';
     updateSelectAllState();
     return;
   }
@@ -893,15 +1006,20 @@ function renderPresetPreview(forceReset = false) {
     <div class="preset-plan-list">
       ${maintenancePlanDraft.map((item) => `
         <div class="preset-plan-row" data-plan-id="${item.id}">
-          <input data-plan-selected type="checkbox" ${item.selected ? "checked" : ""} aria-label="Incluir mantención" />
-          <input data-plan-name type="text" value="${escapeHtml(item.type)}" aria-label="Nombre de mantención" />
-          <label class="interval-input">
-            <input data-plan-interval type="number" min="100" step="100" value="${item.intervalKm}" aria-label="Periodicidad en kilómetros" />
-            <span>km</span>
-          </label>
-          <select data-plan-priority aria-label="Prioridad">
-            ${["Alta", "Media", "Baja"].map((priority) => `<option value="${priority}" ${item.priority === priority ? "selected" : ""}>${priority}</option>`).join("")}
-          </select>
+          <div class="preset-plan-main">
+            <input data-plan-selected type="checkbox" ${item.selected ? "checked" : ""} aria-label="Incluir mantenciÃ³n" />
+            <input data-plan-name type="text" value="${escapeHtml(item.type)}" aria-label="Nombre de mantenciÃ³n" />
+            ${renderMaintenanceIcon(item.type)}
+          </div>
+          <div class="preset-plan-meta">
+            <label class="interval-input">
+              <input data-plan-interval type="number" min="100" step="100" value="${item.intervalKm}" aria-label="Periodicidad en kilÃ³metros" />
+              <span>km</span>
+            </label>
+            <select data-plan-priority aria-label="Prioridad">
+              ${["Alta", "Media", "Baja"].map((priority) => `<option value="${priority}" ${item.priority === priority ? "selected" : ""}>${priority}</option>`).join("")}
+            </select>
+          </div>
         </div>
       `).join("")}
     </div>
@@ -948,7 +1066,7 @@ function renderMaintenancePlanSelection() {
   const vehicle = data.vehicles.find((item) => item.id === vehicleId);
   if (!vehicle) {
     fields.maintenanceCurrentMileage.textContent = "";
-    fields.maintenancePlanSelection.innerHTML = '<div class="empty">Selecciona un vehículo con plan de mantención.</div>';
+    fields.maintenancePlanSelection.innerHTML = '<div class="empty">Selecciona un vehÃ­culo con plan de mantenciÃ³n.</div>';
     return;
   }
 
@@ -964,7 +1082,7 @@ function renderMaintenancePlanSelection() {
     .sort((a, b) => a.remaining - b.remaining || priorityRank(a.priority) - priorityRank(b.priority));
 
   if (plans.length === 0) {
-    fields.maintenancePlanSelection.innerHTML = '<div class="empty">Este vehículo no tiene mantenciones en su plan.</div>';
+    fields.maintenancePlanSelection.innerHTML = '<div class="empty">Este vehÃ­culo no tiene mantenciones en su plan.</div>';
     fields.selectAllPerformedMaintenance.checked = false;
     fields.selectAllPerformedMaintenance.disabled = true;
     return;
@@ -982,7 +1100,7 @@ function renderMaintenancePlanSelection() {
         </label>
         <span class="performed-maintenance-name">
           <strong>${escapeHtml(plan.type)}</strong>
-          <small>Próxima programada: ${formatNumber(plan.nextMileage)} km</small>
+          <small>PrÃ³xima programada: ${formatNumber(plan.nextMileage)} km</small>
           ${plan.notes ? `<small class="plan-task-notes">${escapeHtml(plan.notes)}</small>` : ""}
         </span>
         ${renderMaintenanceIcon(plan.type)}
@@ -992,7 +1110,7 @@ function renderMaintenancePlanSelection() {
             <span class="priority priority-${plan.priority.toLowerCase()}">${plan.priority}</span>
           </span>
           <label>
-            Próxima en km
+            PrÃ³xima en km
             <input data-next-mileage data-interval-km="${plan.intervalKm}" type="number" min="0" step="1" value="${performedMileage + plan.intervalKm}" />
           </label>
         </span>
@@ -1344,14 +1462,14 @@ function renderMaintenanceAlerts() {
 function renderVehicles() {
   const data = currentData();
   if (data.vehicles.length === 0) {
-    fields.vehicleList.innerHTML = '<div class="empty">Agrega tu primer vehículo para comenzar el control.</div>';
+    fields.vehicleList.innerHTML = '<div class="empty">Agrega tu primer vehÃ­culo para comenzar el control.</div>';
     return;
   }
 
   const vehicle = selectedSummaryVehicle(data);
   fields.vehicleList.innerHTML = vehicle
     ? renderVehicleCard(vehicle, data)
-    : '<div class="empty">Selecciona un vehículo para ver su resumen.</div>';
+    : '<div class="empty">Selecciona un vehÃ­culo para ver su resumen.</div>';
 }
 
 // Genera el contenido de una tarjeta con resumen, historial y plan.
@@ -1369,7 +1487,11 @@ function renderVehicleCard(vehicle, data) {
   const maintenanceStatus = formatMaintenanceGroupStatus(maintenanceGroup, currentMileage);
   const plans = data.maintenancePlans
     .filter((plan) => plan.vehicleId === vehicle.id)
-    .sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority));
+    .sort((a, b) => {
+      const remainingA = Number(a.nextMileage || 0) - Number(currentMileage || 0);
+      const remainingB = Number(b.nextMileage || 0) - Number(currentMileage || 0);
+      return remainingA - remainingB || priorityRank(a.priority) - priorityRank(b.priority);
+    });
 
   return `
     <article class="vehicle-card">
@@ -1381,26 +1503,31 @@ function renderVehicleCard(vehicle, data) {
         <div class="card-actions">
           <button class="ghost-button small-button" data-edit-vehicle="${vehicle.id}" type="button">Editar</button>
           <button class="ghost-button small-button" data-edit-plan="${vehicle.id}" type="button">Modificar plan</button>
-          <button class="delete-button" data-delete-vehicle="${vehicle.id}" type="button">Eliminar</button>
         </div>
       </header>
       <div class="card-grid">
         <div class="mini-box"><span>Kilometraje actual</span><strong>${formatNumber(currentMileage)} km</strong></div>
-        <div class="mini-box"><span>Última mantención</span><strong>${lastMaintenance ? formatDate(lastMaintenance.date) : "Pendiente"}</strong></div>
+        <div class="mini-box"><span>Ãšltima mantenciÃ³n</span><strong>${lastMaintenance ? formatDate(lastMaintenance.date) : "Pendiente"}</strong></div>
         <div class="mini-box maintenance-summary-box">
-          <span>Próxima mantención</span>
+          <span>PrÃ³xima mantenciÃ³n</span>
           <strong>${maintenanceStatus.text}</strong>
           <small>${escapeHtml(maintenanceStatus.names)}</small>
         </div>
       </div>
       <p class="muted">Gasto en mantenciones: ${formatCurrency(totalCost)}</p>
-      <div class="history">
-        ${maintenanceItems.slice(0, 3).map(renderMaintenanceItem).join("") || '<p class="muted">Sin mantenciones registradas.</p>'}
-      </div>
+      <details class="history-details latest-maintenance-details">
+        <summary>
+          <span>Últimas mantenciones</span>
+          <small>${Math.min(maintenanceItems.length, 3)} de ${maintenanceItems.length}</small>
+        </summary>
+        <div class="history">
+          ${maintenanceItems.slice(0, 3).map(renderMaintenanceItem).join("") || '<p class="muted">Sin mantenciones registradas.</p>'}
+        </div>
+      </details>
       ${plans.length ? `
         <h4>Plan recomendado</h4>
         <div class="plan-list">
-          ${plans.map(renderMaintenancePlan).join("")}
+          ${plans.map((plan) => renderMaintenancePlan(plan, currentMileage)).join("")}
         </div>
       ` : ""}
     </article>
@@ -1408,18 +1535,37 @@ function renderVehicleCard(vehicle, data) {
 }
 
 // Genera una fila compacta para una tarea del plan de mantencion.
-function renderMaintenancePlan(plan) {
+function renderMaintenancePlan(plan, currentMileage = 0) {
+  const remaining = Number(plan.nextMileage || 0) - Number(currentMileage || 0);
+  const progress = maintenancePlanProgress(plan, currentMileage);
   return `
     <div class="plan-item">
+      ${renderMaintenanceIcon(plan.type)}
       <div>
         <strong>${escapeHtml(plan.type)}</strong>
         <small>Cada ${formatNumber(plan.intervalKm)} km</small>
         ${plan.notes ? `<small>${escapeHtml(plan.notes)}</small>` : ""}
       </div>
-      <span class="priority priority-${plan.priority.toLowerCase()}">${plan.priority}</span>
-      <small>Próxima: ${formatNumber(plan.nextMileage)} km</small>
+      <div class="plan-progress-group">
+        <span class="plan-next-line">
+          <small>PrÃ³xima: ${formatNumber(plan.nextMileage)} km</small>
+          <span class="priority priority-${plan.priority.toLowerCase()}">${plan.priority}</span>
+        </span>
+        <span class="plan-progress" aria-label="Avance del ciclo ${Math.round(progress)}%">
+          <span style="width: ${progress}%"></span>
+        </span>
+        <small>${remaining <= 0 ? `Vencida por ${formatNumber(Math.abs(remaining))} km` : `Faltan ${formatNumber(remaining)} km`}</small>
+      </div>
     </div>
   `;
+}
+
+// Calcula el porcentaje recorrido del ciclo de una tarea del plan.
+function maintenancePlanProgress(plan, currentMileage) {
+  const interval = Math.max(Number(plan.intervalKm || 0), 1);
+  const remaining = Number(plan.nextMileage || 0) - Number(currentMileage || 0);
+  const completed = ((interval - remaining) / interval) * 100;
+  return Math.max(0, Math.min(100, Math.round(completed)));
 }
 
 // Abre el editor del plan para el vehiculo indicado.
@@ -1465,13 +1611,13 @@ function renderMaintenancePlanEditor() {
           <button class="delete-button" data-delete-plan-item="${plan.id}" type="button">Eliminar</button>
         </div>
         <label>
-          Notas de esta mantención
+          Notas de esta mantenciÃ³n
           <textarea data-edit-plan-notes rows="2" placeholder="Aceite, filtro, repuesto o especificacion recomendada...">${escapeHtml(plan.notes || "")}</textarea>
         </label>
-        <small>Próxima programada: ${formatNumber(plan.nextMileage)} km</small>
+        <small>PrÃ³xima programada: ${formatNumber(plan.nextMileage)} km</small>
       </article>
     `).join("")
-    : '<div class="empty">Este vehículo no tiene mantenciones en su plan.</div>';
+    : '<div class="empty">Este vehÃ­culo no tiene mantenciones en su plan.</div>';
 }
 
 // Crea una tarea nueva dentro del plan del vehiculo seleccionado.
@@ -1510,8 +1656,8 @@ async function deletePlanItem(planId) {
   if (!data) return;
   const plan = data.maintenancePlans.find((item) => item.id === planId);
   const shouldDelete = confirmDeletion(
-    `Eliminar ${plan?.type || "mantención"} del plan`,
-    "Esta tarea dejará de aparecer en los avisos y en la lista de mantenciones por realizar. Los trabajos ya registrados en el historial se conservarán. Esta acción no se puede deshacer.",
+    `Eliminar ${plan?.type || "mantenciÃ³n"} del plan`,
+    "Esta tarea dejarÃ¡ de aparecer en los avisos y en la lista de mantenciones por realizar. Los trabajos ya registrados en el historial se conservarÃ¡n. Esta acciÃ³n no se puede deshacer.",
   );
   if (!shouldDelete) return;
 
@@ -1551,7 +1697,7 @@ async function saveMaintenancePlanEdits() {
 
   await saveApp();
   fields.planEditMessage.textContent = "Plan actualizado correctamente.";
-  showAppMessage("Plan de mantención actualizado correctamente.", "success");
+  showAppMessage("Plan de mantenciÃ³n actualizado correctamente.", "success");
   renderMaintenancePlanEditor();
   renderMaintenancePlanSelection();
   renderVehicles();
@@ -1562,10 +1708,10 @@ async function editVehicle(vehicleId, data) {
   const vehicle = data.vehicles.find((item) => item.id === vehicleId);
   if (!vehicle) return;
 
-  const name = prompt("Nombre del vehículo", vehicle.name);
+  const name = prompt("Nombre del vehÃ­culo", vehicle.name);
   if (name === null) return;
 
-  const type = prompt("Tipo de vehículo: Auto, Moto, Camioneta u Otro", vehicle.type);
+  const type = prompt("Tipo de vehÃ­culo: Auto, Moto, Camioneta u Otro", vehicle.type);
   if (type === null) return;
 
   const plate = prompt("Patente", vehicle.plate);
@@ -1594,18 +1740,38 @@ async function editVehicle(vehicleId, data) {
 // Genera una fila del historial para una mantencion realizada.
 function renderMaintenanceItem(item) {
   return `
-    <div class="history-item">
-      <div>
-        <strong>${escapeHtml(item.type)}</strong><br />
-        <small>${formatMaintenanceMileage(item)}</small><br />
-        <small>${escapeHtml(item.notes || "Sin notas")}</small>
+    <div class="history-item history-item-with-icon">
+      ${renderMaintenanceIcon(item.type)}
+      <div class="history-maintenance-main">
+        <strong class="history-maintenance-title">${escapeHtml(item.type)}</strong>
+        ${renderMaintenanceMileageInfo(item)}
+        ${renderMaintenanceNotes(item.notes)}
       </div>
-      <div>
+      <div class="history-maintenance-cost">
         <strong>${formatCurrency(item.cost)}</strong><br />
         <small>${formatDate(item.date)}</small>
       </div>
     </div>
   `;
+}
+
+// Muestra solo el primer renglon de una nota y permite desplegar el texto completo.
+function renderMaintenanceNotes(notes) {
+  const cleanNotes = (notes || "").trim();
+  if (!cleanNotes) return '<small>Sin notas</small>';
+
+  return `
+    <button class="note-toggle" type="button" aria-expanded="false">${escapeHtml(cleanNotes)}</button>
+  `;
+}
+
+// Expande o contrae una nota de mantencion tocando directamente el texto.
+function toggleMaintenanceNote(event) {
+  const noteButton = event.target.closest(".note-toggle");
+  if (!noteButton) return;
+
+  const isExpanded = noteButton.classList.toggle("is-expanded");
+  noteButton.setAttribute("aria-expanded", String(isExpanded));
 }
 
 // Devuelve las recomendaciones base segun el tipo de vehiculo.
@@ -1649,7 +1815,7 @@ function priorityRank(priority) {
 
 // Muestra una advertencia comun antes de cualquier eliminacion permanente.
 function confirmDeletion(title, detail) {
-  return window.confirm(`${title}\n\n${detail}\n\n¿Estas seguro de que deseas continuar?`);
+  return window.confirm(`${title}\n\n${detail}\n\nÂ¿Estas seguro de que deseas continuar?`);
 }
 
 // Carga Tesseract.js solo cuando se necesita reconocer una imagen.
@@ -1680,7 +1846,7 @@ async function handleDashboardPhoto(file) {
   const data = currentData();
   const vehicle = selectedSummaryVehicle(data);
   if (!vehicle) {
-    renderOcrMessage("Selecciona un vehículo antes de procesar la foto.", "warning");
+    renderOcrMessage("Selecciona un vehÃ­culo antes de procesar la foto.", "warning");
     return;
   }
 
@@ -1786,7 +1952,7 @@ async function confirmOcrMileage() {
   const currentMileage = getCurrentMileage(vehicle, data);
   if (mileage < currentMileage) {
     const shouldContinue = window.confirm(
-      `El kilometraje detectado (${formatNumber(mileage)} km) es menor al kilometraje actual (${formatNumber(currentMileage)} km).\n\n¿Quieres guardarlo de todas formas?`,
+      `El kilometraje detectado (${formatNumber(mileage)} km) es menor al kilometraje actual (${formatNumber(currentMileage)} km).\n\nÂ¿Quieres guardarlo de todas formas?`,
     );
     if (!shouldContinue) return;
   }
@@ -1869,7 +2035,7 @@ async function saveMileageRecord(vehicleId, date, value) {
 function renderHistory() {
   const data = currentData();
   if (!data || data.vehicles.length === 0) {
-    fields.historyList.innerHTML = '<div class="empty">Agrega un vehículo para revisar su historial.</div>';
+    fields.historyList.innerHTML = '<div class="empty">Agrega un vehÃ­culo para revisar su historial.</div>';
     return;
   }
 
@@ -1879,7 +2045,7 @@ function renderHistory() {
 
   const vehicle = data.vehicles.find((item) => item.id === fields.historyVehicle.value);
   if (!vehicle) {
-    fields.historyList.innerHTML = '<div class="empty">Selecciona un vehículo.</div>';
+    fields.historyList.innerHTML = '<div class="empty">Selecciona un vehÃ­culo.</div>';
     return;
   }
 
@@ -1904,10 +2070,15 @@ function renderHistory() {
       <div class="history">
         ${maintenanceItems.map(renderMaintenanceItem).join("") || '<p class="muted">Sin mantenciones registradas.</p>'}
       </div>
-      <h4>Kilometraje</h4>
-      <div class="history">
-        ${mileageItems.map(renderMileageItem).join("") || '<p class="muted">Sin kilometrajes registrados.</p>'}
-      </div>
+      <details class="history-details">
+        <summary>
+          <span>Kilometraje</span>
+          <small>${mileageItems.length} registros</small>
+        </summary>
+        <div class="history">
+          ${mileageItems.map(renderMileageItem).join("") || '<p class="muted">Sin kilometrajes registrados.</p>'}
+        </div>
+      </details>
     </article>
   `;
 }
@@ -1954,10 +2125,19 @@ function getNextMaintenanceGroup(vehicleId, data, currentMileage) {
 }
 
 // Resume los kilometrajes realizado y proximo de una mantencion historica.
-function formatMaintenanceMileage(item) {
-  const maintenanceKm = item.mileage ? `${formatNumber(item.mileage)} km realizados` : "Km de mantención no registrado";
-  const nextKm = item.nextMileage ? ` - próxima en ${formatNumber(item.nextMileage)} km` : "";
-  return `${maintenanceKm}${nextKm}`;
+function renderMaintenanceMileageInfo(item) {
+  return `
+    <div class="maintenance-mileage-pair">
+      <div>
+        <span>Última realizada a los:</span>
+        <strong>${item.mileage ? `${formatNumber(item.mileage)} km` : "Sin registro"}</strong>
+      </div>
+      <div>
+        <span>Próxima a los:</span>
+        <strong>${item.nextMileage ? `${formatNumber(item.nextMileage)} km` : "Sin programar"}</strong>
+      </div>
+    </div>
+  `;
 }
 
 // Crea el texto y estilo del aviso para un grupo de mantenciones.
@@ -1968,7 +2148,7 @@ function formatMaintenanceGroupStatus(maintenanceGroup, currentMileage) {
 
   const nextMileage = Number(maintenanceGroup[0].nextMileage);
   const remaining = nextMileage - currentMileage;
-  const names = maintenanceGroup.map((item) => item.type).join(" · ");
+  const names = maintenanceGroup.map((item) => item.type).join(" Â· ");
 
   if (remaining <= 0) {
     const text = remaining === 0
@@ -1984,18 +2164,21 @@ function formatMaintenanceGroupStatus(maintenanceGroup, currentMileage) {
   };
 }
 
-// Cambia entre las secciones principales Perfil, Vehiculos y Mantenciones.
+// Cambia entre las secciones principales Perfil, Vehiculos, Plan y Correctivas.
 function setMainTab(tabName) {
   const isProfile = tabName === "profile";
   const isVehicles = tabName === "vehicles";
   const isMaintenance = tabName === "maintenance";
+  const isCorrective = tabName === "corrective";
 
   fields.profileMainTab.classList.toggle("is-active", isProfile);
   fields.vehiclesMainTab.classList.toggle("is-active", isVehicles);
   fields.maintenanceMainTab.classList.toggle("is-active", isMaintenance);
+  fields.correctiveMainTab.classList.toggle("is-active", isCorrective);
   fields.profileSection.classList.toggle("is-hidden", !isProfile);
   fields.vehiclesSection.classList.toggle("is-hidden", !isVehicles);
   fields.maintenanceSection.classList.toggle("is-hidden", !isMaintenance);
+  fields.correctiveSection.classList.toggle("is-hidden", !isCorrective);
   closeMobileMenu();
 }
 
@@ -2047,9 +2230,24 @@ function renderAppMessage() {
   fields.appMessage.classList.toggle("is-visible", Boolean(appMessage));
 }
 
+// Actualiza el aviso de modo offline sin bloquear la lectura de datos cargados.
+function updateConnectivityState() {
+  const isOffline = !navigator.onLine;
+  fields.offlineNotice?.classList.toggle("is-hidden", !isOffline);
+}
+
+// Evita acciones de escritura cuando no hay internet para no simular guardados falsos.
+function ensureOnlineForWrite(actionLabel = "guardar cambios") {
+  updateConnectivityState();
+  if (navigator.onLine) return true;
+  showAppMessage(`Sin conexiÃ³n: no se puede ${actionLabel}. Revisa los datos ya cargados y vuelve a intentar con internet.`, "warning");
+  return false;
+}
+
 // Muestra un aviso cuando el PWA ya tiene una version nueva lista.
 function showUpdateNotice() {
   if (!fields.updateNotice) return;
+  updateAvailable = true;
   fields.updateNotice.classList.remove("is-hidden");
 }
 
@@ -2065,6 +2263,29 @@ function showDataError(error) {
 function setTodayDefaults() {
   fields.quickMileageDate.value ||= today();
   fields.maintenanceDate.value ||= today();
+  fields.correctiveDate.value ||= today();
+}
+
+// Muestra el campo libre cuando la categoria correctiva elegida es "Otro".
+function toggleCorrectiveOtherCategory() {
+  const isOther = fields.correctiveCategory.value === "Otro";
+  fields.correctiveOtherLabel.classList.toggle("is-hidden", !isOther);
+  fields.correctiveOtherCategory.required = isOther;
+  if (!isOther) fields.correctiveOtherCategory.value = "";
+}
+
+// Prellena el kilometraje correctivo con el kilometraje actual del vehiculo elegido.
+function updateCorrectiveMileageDefault(force = false) {
+  const data = currentData();
+  const vehicle = data?.vehicles.find((item) => item.id === fields.correctiveVehicle.value);
+  if (!vehicle) {
+    fields.correctiveMileage.value = "";
+    return;
+  }
+
+  if (force || !fields.correctiveMileage.value) {
+    fields.correctiveMileage.value = getCurrentMileage(vehicle, data);
+  }
 }
 
 // Devuelve la fecha actual en el formato YYYY-MM-DD de los inputs HTML.

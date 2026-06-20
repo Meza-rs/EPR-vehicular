@@ -447,6 +447,35 @@ h2 {
   padding: 0 12px;
 }
 
+.offline-notice {
+  position: fixed;
+  right: 18px;
+  bottom: 146px;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(520px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border: 1px solid #f1d1b7;
+  border-left: 4px solid var(--warning);
+  border-radius: 8px;
+  box-shadow: 0 16px 36px rgba(17, 24, 39, 0.18);
+  background: #fff6ef;
+  color: var(--warning);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.offline-notice strong {
+  flex: 0 0 auto;
+}
+
+.offline-notice span {
+  color: var(--text);
+  font-weight: 700;
+}
+
 @media (max-width: 640px) {
   .app-message {
     right: 12px;
@@ -457,6 +486,14 @@ h2 {
   .update-notice {
     right: 12px;
     bottom: 76px;
+    width: calc(100vw - 24px);
+  }
+
+  .offline-notice {
+    right: 12px;
+    bottom: 140px;
+    align-items: flex-start;
+    flex-direction: column;
     width: calc(100vw - 24px);
   }
 }
@@ -520,20 +557,42 @@ h2 {
 
 .quick-mileage-grid {
   display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) minmax(160px, 1fr) minmax(160px, 1fr) minmax(190px, auto);
+  grid-template-columns: 1fr 1fr;
   align-items: end;
   gap: 12px;
 }
 
+.quick-mileage-grid label:first-child {
+  grid-column: 1 / -1;
+}
+
 .quick-mileage-grid button {
+  grid-column: 1 / -1;
   min-width: 190px;
   padding: 0 16px;
 }
 
+.icon-action-button {
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+}
+
+.icon-action-button svg {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .ocr-actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 12px;
+  margin: 0;
 }
 
 .ocr-panel {
@@ -857,26 +916,18 @@ textarea:focus-visible {
 }
 
 .select-all-toggle input,
-.preset-plan-row > input[type="checkbox"] {
+.preset-plan-main > input[type="checkbox"] {
   width: 18px;
   height: 18px;
   accent-color: var(--accent);
 }
 
 .preset-preview {
-  overflow-x: auto;
-}
-
-.preset-table-header,
-.preset-plan-row {
-  display: grid;
-  grid-template-columns: 42px minmax(210px, 1.6fr) minmax(140px, 0.8fr) 110px;
-  align-items: center;
-  gap: 8px;
-  min-width: 720px;
+  overflow-x: visible;
 }
 
 .preset-table-header {
+  display: none;
   padding: 0 8px 7px;
   color: var(--muted);
   font-size: 11px;
@@ -890,10 +941,38 @@ textarea:focus-visible {
 }
 
 .preset-plan-row {
-  padding: 7px 8px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
   border: 1px solid #dfe1f4;
   border-radius: 6px;
   background: #fff;
+}
+
+.preset-plan-main,
+.preset-plan-meta {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+}
+
+.preset-plan-main {
+  grid-template-columns: 22px minmax(0, 1fr) 52px;
+}
+
+.preset-plan-meta {
+  grid-template-columns: minmax(0, 1fr) 116px;
+}
+
+.preset-plan-main .maintenance-icon-slot {
+  width: 46px;
+  height: 36px;
+  justify-self: end;
+}
+
+.preset-plan-main .maintenance-icon-slot svg {
+  width: 26px;
+  height: 26px;
 }
 
 .preset-plan-row input,
@@ -1076,12 +1155,27 @@ textarea:focus-visible {
 }
 
 .plan-item {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto minmax(120px, auto);
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
   gap: 12px;
-  padding: 10px;
+  padding: 12px 10px;
   border-top: 1px solid var(--line);
+}
+
+.plan-item > div:not(.maintenance-icon-slot) {
+  min-width: 0;
+}
+
+.plan-item .maintenance-icon-slot {
+  position: absolute;
+  top: 12px;
+  right: 10px;
+}
+
+.plan-item > div:not(.maintenance-icon-slot):first-of-type {
+  padding-right: 62px;
 }
 
 .plan-item div,
@@ -1092,6 +1186,38 @@ textarea:focus-visible {
 
 .plan-item small {
   color: var(--muted);
+}
+
+.plan-item > small {
+  display: none;
+}
+
+.plan-progress-group {
+  display: grid;
+  gap: 7px;
+  margin-top: 4px;
+}
+
+.plan-next-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.plan-progress {
+  display: block;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e6e9f2;
+}
+
+.plan-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
 }
 
 .priority {
@@ -1130,8 +1256,144 @@ textarea:focus-visible {
   border-top: 1px solid var(--line);
 }
 
+.history-item-with-icon {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.history-item-with-icon > div {
+  min-width: 0;
+}
+
+.history-item-with-icon .maintenance-icon-slot {
+  position: absolute;
+  top: 10px;
+  right: 0;
+}
+
+.history-maintenance-main {
+  display: grid;
+  gap: 8px;
+}
+
+.history-maintenance-title {
+  display: block;
+  padding-right: 60px;
+}
+
+.history-maintenance-cost {
+  text-align: right;
+}
+
 .history-item small {
   color: var(--muted);
+}
+
+.maintenance-mileage-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.maintenance-mileage-pair span,
+.maintenance-mileage-pair strong {
+  display: block;
+}
+
+.maintenance-mileage-pair span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.maintenance-mileage-pair strong {
+  margin-top: 2px;
+  color: var(--accent);
+  font-size: 15px;
+}
+
+.history-details {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.history-details summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  cursor: pointer;
+  color: var(--accent-strong);
+  font-size: 15px;
+  font-weight: 800;
+  list-style: none;
+}
+
+.history-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.history-details summary::after {
+  content: "+";
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #dfe1f4;
+  border-radius: 6px;
+  color: var(--accent);
+  background: #f8f9ff;
+}
+
+.history-details[open] summary::after {
+  content: "-";
+}
+
+.history-details summary small {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.latest-maintenance-details {
+  margin-top: 10px;
+}
+
+.note-toggle {
+  display: -webkit-box;
+  overflow: hidden;
+  min-height: auto;
+  width: 100%;
+  max-width: 100%;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.note-toggle:hover {
+  background: transparent;
+  color: var(--text);
+}
+
+.note-toggle.is-expanded {
+  overflow: visible;
+  -webkit-line-clamp: unset;
+  white-space: normal;
+  white-space: pre-line;
 }
 
 .empty {
@@ -1254,6 +1516,10 @@ textarea:focus-visible {
     display: none;
   }
 
+  #refreshAppButton {
+    display: none;
+  }
+
   .main-tabs {
     position: fixed;
     top: 74px;
@@ -1354,12 +1620,20 @@ textarea:focus-visible {
   }
 
   .form-grid,
-  .quick-mileage-grid,
   .stats,
   .alert-list,
   .history-filters,
   .card-grid {
     grid-template-columns: 1fr;
+  }
+
+  .quick-mileage-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .quick-mileage-grid label:first-child,
+  .quick-mileage-grid button {
+    grid-column: 1 / -1;
   }
 
   .stat {
@@ -1391,6 +1665,28 @@ textarea:focus-visible {
 
   .plan-item {
     grid-template-columns: 1fr;
+    min-height: 88px;
+    padding: 12px 0;
+  }
+
+  .plan-item .maintenance-icon-slot {
+    top: 12px;
+    right: 0;
+    width: 46px;
+    height: 38px;
+  }
+
+  .plan-item > div:not(.maintenance-icon-slot):first-of-type {
+    padding-right: 58px;
+  }
+
+  .plan-progress-group {
+    grid-column: 1;
+    margin-top: 4px;
+  }
+
+  .plan-next-line {
+    align-items: center;
   }
 
   .maintenance-batch-fields,
@@ -1483,5 +1779,24 @@ textarea:focus-visible {
   .history-item {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .history-item-with-icon {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .history-item-with-icon .maintenance-icon-slot {
+    top: 10px;
+    right: 0;
+    width: 42px;
+    height: 34px;
+  }
+
+  .history-maintenance-title {
+    padding-right: 50px;
+  }
+
+  .history-maintenance-cost {
+    text-align: left;
   }
 }
