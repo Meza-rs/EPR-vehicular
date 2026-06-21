@@ -130,6 +130,7 @@ const fields = {
   dashboardCameraPanel: document.querySelector("#dashboardCameraPanel"),
   dashboardCameraVideo: document.querySelector("#dashboardCameraVideo"),
   dashboardCameraCanvas: document.querySelector("#dashboardCameraCanvas"),
+  dashboardCameraFocusFrame: document.querySelector(".camera-focus-frame"),
   closeDashboardCamera: document.querySelector("#closeDashboardCamera"),
   captureDashboardPhoto: document.querySelector("#captureDashboardPhoto"),
   uploadDashboardPhotoFallback: document.querySelector("#uploadDashboardPhotoFallback"),
@@ -1883,21 +1884,16 @@ async function captureDashboardCameraPhoto() {
     return;
   }
 
-  const sourceWidth = video.videoWidth;
-  const sourceHeight = video.videoHeight;
-  const cropWidth = Math.round(sourceWidth * 0.72);
-  const cropHeight = Math.round(sourceHeight * 0.24);
-  const cropX = Math.round((sourceWidth - cropWidth) / 2);
-  const cropY = Math.round((sourceHeight - cropHeight) / 2);
+  const crop = getVisibleVideoCrop(video, fields.dashboardCameraFocusFrame);
   const canvas = fields.dashboardCameraCanvas;
   const outputWidth = 1200;
-  const outputHeight = Math.round(outputWidth * (cropHeight / cropWidth));
+  const outputHeight = Math.round(outputWidth * (crop.height / crop.width));
   canvas.width = outputWidth;
   canvas.height = outputHeight;
 
   const context = canvas.getContext("2d");
-  context.filter = "grayscale(1) contrast(1.35)";
-  context.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, outputWidth, outputHeight);
+  context.filter = "grayscale(1) contrast(1.45)";
+  context.drawImage(video, crop.x, crop.y, crop.width, crop.height, 0, 0, outputWidth, outputHeight);
 
   canvas.toBlob(async (blob) => {
     if (!blob) {
@@ -1908,6 +1904,49 @@ async function captureDashboardCameraPhoto() {
     const file = new File([blob], "odometro-recortado.jpg", { type: "image/jpeg" });
     await handleDashboardPhoto(file);
   }, "image/jpeg", 0.92);
+}
+
+// Convierte el rectangulo visible de enfoque a coordenadas reales del video.
+function getVisibleVideoCrop(video, frame) {
+  const videoRect = video.getBoundingClientRect();
+  const frameRect = frame.getBoundingClientRect();
+  const sourceWidth = video.videoWidth;
+  const sourceHeight = video.videoHeight;
+  const sourceAspect = sourceWidth / sourceHeight;
+  const visibleAspect = videoRect.width / videoRect.height;
+
+  let renderedWidth = videoRect.width;
+  let renderedHeight = videoRect.height;
+  let offsetX = 0;
+  let offsetY = 0;
+
+  if (sourceAspect > visibleAspect) {
+    renderedHeight = videoRect.height;
+    renderedWidth = renderedHeight * sourceAspect;
+    offsetX = (videoRect.width - renderedWidth) / 2;
+  } else {
+    renderedWidth = videoRect.width;
+    renderedHeight = renderedWidth / sourceAspect;
+    offsetY = (videoRect.height - renderedHeight) / 2;
+  }
+
+  const scaleX = sourceWidth / renderedWidth;
+  const scaleY = sourceHeight / renderedHeight;
+  const x = (frameRect.left - videoRect.left - offsetX) * scaleX;
+  const y = (frameRect.top - videoRect.top - offsetY) * scaleY;
+  const width = frameRect.width * scaleX;
+  const height = frameRect.height * scaleY;
+
+  return clampCropToVideo({ x, y, width, height }, sourceWidth, sourceHeight);
+}
+
+// Evita que el recorte se salga de los limites reales del video.
+function clampCropToVideo(crop, sourceWidth, sourceHeight) {
+  const x = Math.max(0, Math.min(sourceWidth - 1, Math.round(crop.x)));
+  const y = Math.max(0, Math.min(sourceHeight - 1, Math.round(crop.y)));
+  const width = Math.max(1, Math.min(sourceWidth - x, Math.round(crop.width)));
+  const height = Math.max(1, Math.min(sourceHeight - y, Math.round(crop.height)));
+  return { x, y, width, height };
 }
 
 // Carga Tesseract.js solo cuando se necesita reconocer una imagen.
@@ -1969,34 +2008,114 @@ async function handleDashboardPhoto(file) {
 async function recognizeMileageFromImage(file) {
   const Tesseract = await loadOcrEngine();
   renderOcrMessage("Reconociendo numeros en la foto...", "info");
+  const variants = await createOcrImageVariants(file);
+  const texts = [];
 
-  const result = await Tesseract.recognize(file, "eng", {
-    tessedit_char_whitelist: "0123456789., ",
-    logger: (message) => {
-      if (message.status === "recognizing text" && typeof message.progress === "number") {
-        setOcrProgress(message.progress);
-      }
-    },
-  });
+  for (const [index, variant] of variants.entries()) {
+    const result = await Tesseract.recognize(variant.blob, "eng", {
+      tessedit_char_whitelist: "0123456789., ",
+      tessedit_pageseg_mode: "7",
+      preserve_interword_spaces: "1",
+      logger: (message) => {
+        if (message.status === "recognizing text" && typeof message.progress === "number") {
+          setOcrProgress((index + message.progress) / variants.length);
+        }
+      },
+    });
+    texts.push(result?.data?.text || "");
+  }
 
   setOcrProgress(1);
-  return result?.data?.text || "";
+  return texts.join("\n");
+}
+
+// Crea variantes de alto contraste para tableros claros u oscuros.
+async function createOcrImageVariants(file) {
+  const image = await loadImageBitmap(file);
+  const baseCanvas = document.createElement("canvas");
+  const targetWidth = 1400;
+  const targetHeight = Math.max(180, Math.round(targetWidth * (image.height / image.width)));
+  baseCanvas.width = targetWidth;
+  baseCanvas.height = targetHeight;
+  const baseContext = baseCanvas.getContext("2d");
+  baseContext.filter = "grayscale(1) contrast(1.7)";
+  baseContext.drawImage(image, 0, 0, targetWidth, targetHeight);
+
+  return [
+    { name: "contrast", blob: await canvasToBlob(baseCanvas, "image/png") },
+    { name: "threshold", blob: await canvasToBlob(createThresholdCanvas(baseCanvas, false), "image/png") },
+    { name: "inverted", blob: await canvasToBlob(createThresholdCanvas(baseCanvas, true), "image/png") },
+  ];
+}
+
+// Carga una imagen desde archivo manteniendo el flujo compatible con navegadores moviles.
+function loadImageBitmap(file) {
+  if (window.createImageBitmap) return window.createImageBitmap(file);
+
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const url = URL.createObjectURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(image);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("No se pudo preparar la imagen para OCR."));
+    };
+    image.src = url;
+  });
+}
+
+// Genera una version binaria para mejorar numeros de alto contraste.
+function createThresholdCanvas(sourceCanvas, invert = false) {
+  const canvas = document.createElement("canvas");
+  canvas.width = sourceCanvas.width;
+  canvas.height = sourceCanvas.height;
+  const context = canvas.getContext("2d");
+  context.drawImage(sourceCanvas, 0, 0);
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+
+  for (let index = 0; index < data.length; index += 4) {
+    const value = data[index] > 145 ? 255 : 0;
+    const output = invert ? 255 - value : value;
+    data[index] = output;
+    data[index + 1] = output;
+    data[index + 2] = output;
+  }
+
+  context.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
+// Convierte canvas a Blob con promesa para encadenarlo con Tesseract.
+function canvasToBlob(canvas, type = "image/png") {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("No se pudo preparar la imagen para OCR."));
+    }, type);
+  });
 }
 
 // Extrae, limpia y ordena posibles kilometrajes desde el texto OCR.
 function extractMileageCandidates(text, currentMileage) {
   const matches = [...String(text).matchAll(/(?:^|[^\d])(\d{1,3}(?:[.,\s]\d{3})+|\d{3,8})(?=$|[^\d])/g)]
     .map((match) => match[1]);
-  const uniqueCandidates = [...new Set(matches.map(normalizeMileageCandidate).filter(Boolean))]
-    .filter((value) => value >= 100)
+  const normalizedCandidates = matches.map(normalizeMileageCandidate).filter(Boolean);
+  const preferredCandidates = normalizedCandidates.filter((candidate) => candidate.digitCount >= 4);
+  const fallbackCandidates = normalizedCandidates.filter((candidate) => candidate.digitCount >= 3);
+  const candidates = preferredCandidates.length > 0 ? preferredCandidates : fallbackCandidates;
+  const uniqueCandidates = [...new Map(candidates.map((candidate) => [candidate.value, candidate])).values()]
     .sort((a, b) => {
-      const aIsForward = a >= currentMileage ? 0 : 1;
-      const bIsForward = b >= currentMileage ? 0 : 1;
+      const aIsForward = a.value >= currentMileage ? 0 : 1;
+      const bIsForward = b.value >= currentMileage ? 0 : 1;
       if (aIsForward !== bIsForward) return aIsForward - bIsForward;
-      return Math.abs(a - currentMileage) - Math.abs(b - currentMileage);
+      return Math.abs(a.value - currentMileage) - Math.abs(b.value - currentMileage);
     });
 
-  return uniqueCandidates.slice(0, 6);
+  return uniqueCandidates.slice(0, 6).map((candidate) => candidate.value);
 }
 
 // Convierte valores como 55.100, 55,100 o 55 100 a 55100.
@@ -2004,7 +2123,7 @@ function normalizeMileageCandidate(value) {
   const digits = String(value).replace(/\D/g, "");
   if (digits.length < 3 || digits.length > 8) return null;
   const number = Number(digits);
-  return Number.isFinite(number) ? number : null;
+  return Number.isFinite(number) ? { value: number, digitCount: digits.length } : null;
 }
 
 // Dibuja los candidatos detectados y deja uno listo para confirmar.
