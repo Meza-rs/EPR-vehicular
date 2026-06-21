@@ -254,6 +254,24 @@
                   <button id="confirmOcrMileage" type="button">Confirmar kilometraje</button>
                 </div>
               </section>
+              <section id="dashboardCameraPanel" class="camera-modal is-hidden" aria-label="Camara para odometro">
+                <div class="camera-card">
+                  <div class="camera-header">
+                    <strong>Enfoca el odometro</strong>
+                    <button id="closeDashboardCamera" class="ghost-button small-button" type="button">Cerrar</button>
+                  </div>
+                  <div class="camera-view">
+                    <video id="dashboardCameraVideo" autoplay muted playsinline></video>
+                    <div class="camera-focus-frame" aria-hidden="true"></div>
+                  </div>
+                  <p class="camera-help">Alinea los numeros dentro del rectangulo. Solo esa zona se enviara al OCR.</p>
+                  <div class="camera-actions">
+                    <button id="captureDashboardPhoto" type="button">Usar zona enfocada</button>
+                    <button id="uploadDashboardPhotoFallback" class="ghost-button" type="button">Cargar imagen</button>
+                  </div>
+                  <canvas id="dashboardCameraCanvas" class="visually-hidden"></canvas>
+                </div>
+              </section>
             </section>
 
             <section class="dashboard wide">

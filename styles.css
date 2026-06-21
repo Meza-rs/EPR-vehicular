@@ -688,6 +688,69 @@ h2 {
   font-weight: 700;
 }
 
+.camera-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(7, 11, 32, 0.72);
+}
+
+.camera-card {
+  display: grid;
+  gap: 12px;
+  width: min(720px, 100%);
+  border-radius: 10px;
+  padding: 14px;
+  background: #fff;
+  box-shadow: 0 24px 60px rgba(7, 11, 32, 0.32);
+}
+
+.camera-header,
+.camera-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.camera-view {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #050816;
+  aspect-ratio: 16 / 9;
+}
+
+.camera-view video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.camera-focus-frame {
+  position: absolute;
+  top: 38%;
+  left: 14%;
+  width: 72%;
+  height: 24%;
+  border: 3px solid #ffffff;
+  border-radius: 10px;
+  box-shadow:
+    0 0 0 999px rgba(0, 0, 0, 0.34),
+    0 0 0 4px rgba(42, 48, 135, 0.55);
+}
+
+.camera-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
 label {
   display: grid;
   gap: 7px;
@@ -1650,6 +1713,24 @@ textarea:focus-visible {
   }
 
   .ocr-actions button {
+    width: 100%;
+  }
+
+  .camera-modal {
+    align-items: start;
+    padding: 10px;
+  }
+
+  .camera-card {
+    padding: 12px;
+  }
+
+  .camera-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .camera-actions button {
     width: 100%;
   }
 

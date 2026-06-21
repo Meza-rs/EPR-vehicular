@@ -61,6 +61,7 @@ let appMessage = null;
 let appMessageTimeout = null;
 let updateServiceWorker = null;
 let updateAvailable = false;
+let dashboardCameraStream = null;
 
 const forms = {
   login: document.querySelector("#loginForm"),
@@ -126,6 +127,12 @@ const fields = {
   quickMileageValue: document.querySelector("#quickMileageValue"),
   dashboardPhotoButton: document.querySelector("#dashboardPhotoButton"),
   dashboardPhotoInput: document.querySelector("#dashboardPhotoInput"),
+  dashboardCameraPanel: document.querySelector("#dashboardCameraPanel"),
+  dashboardCameraVideo: document.querySelector("#dashboardCameraVideo"),
+  dashboardCameraCanvas: document.querySelector("#dashboardCameraCanvas"),
+  closeDashboardCamera: document.querySelector("#closeDashboardCamera"),
+  captureDashboardPhoto: document.querySelector("#captureDashboardPhoto"),
+  uploadDashboardPhotoFallback: document.querySelector("#uploadDashboardPhotoFallback"),
   dashboardOcrPanel: document.querySelector("#dashboardOcrPanel"),
   dashboardPhotoPreview: document.querySelector("#dashboardPhotoPreview"),
   ocrStatus: document.querySelector("#ocrStatus"),
@@ -304,7 +311,7 @@ forms.quickMileage.addEventListener("submit", async (event) => {
   render();
 });
 
-fields.dashboardPhotoButton.addEventListener("click", () => {
+fields.dashboardPhotoButton.addEventListener("click", async () => {
   const data = currentData();
   const vehicle = selectedSummaryVehicle(data);
   if (!vehicle) {
@@ -312,14 +319,25 @@ fields.dashboardPhotoButton.addEventListener("click", () => {
     return;
   }
 
-  fields.dashboardPhotoInput.value = "";
-  fields.dashboardPhotoInput.click();
+  if (!navigator.mediaDevices?.getUserMedia) {
+    openDashboardPhotoFilePicker();
+    return;
+  }
+
+  await openDashboardCamera();
 });
 
 fields.dashboardPhotoInput.addEventListener("change", async () => {
   const file = fields.dashboardPhotoInput.files?.[0];
   if (!file) return;
   await handleDashboardPhoto(file);
+});
+
+fields.closeDashboardCamera.addEventListener("click", closeDashboardCamera);
+fields.captureDashboardPhoto.addEventListener("click", captureDashboardCameraPhoto);
+fields.uploadDashboardPhotoFallback.addEventListener("click", () => {
+  closeDashboardCamera();
+  openDashboardPhotoFilePicker();
 });
 
 fields.ocrCandidates.addEventListener("click", (event) => {
@@ -1816,6 +1834,80 @@ function priorityRank(priority) {
 // Muestra una advertencia comun antes de cualquier eliminacion permanente.
 function confirmDeletion(title, detail) {
   return window.confirm(`${title}\n\n${detail}\n\n¿Estas seguro de que deseas continuar?`);
+}
+
+// Abre el selector tradicional de imagen como respaldo para navegadores sin camara integrada.
+function openDashboardPhotoFilePicker() {
+  fields.dashboardPhotoInput.value = "";
+  fields.dashboardPhotoInput.click();
+}
+
+// Muestra una camara dentro de la app para enfocar el odometro con una guia visual.
+async function openDashboardCamera() {
+  try {
+    closeDashboardCamera();
+    renderOcrMessage("Abriendo cámara...", "info");
+    dashboardCameraStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: "environment" },
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+      },
+    });
+    fields.dashboardCameraVideo.srcObject = dashboardCameraStream;
+    fields.dashboardCameraPanel.classList.remove("is-hidden");
+    await fields.dashboardCameraVideo.play();
+  } catch (error) {
+    closeDashboardCamera();
+    renderOcrMessage("No se pudo abrir la cámara. Puedes cargar una imagen desde el dispositivo.", "warning");
+    openDashboardPhotoFilePicker();
+  }
+}
+
+// Cierra la camara y libera el permiso activo del dispositivo.
+function closeDashboardCamera() {
+  if (dashboardCameraStream) {
+    dashboardCameraStream.getTracks().forEach((track) => track.stop());
+    dashboardCameraStream = null;
+  }
+  if (fields.dashboardCameraVideo) fields.dashboardCameraVideo.srcObject = null;
+  fields.dashboardCameraPanel.classList.add("is-hidden");
+}
+
+// Captura solo la zona central del marco y la manda al OCR como imagen recortada.
+async function captureDashboardCameraPhoto() {
+  const video = fields.dashboardCameraVideo;
+  if (!video.videoWidth || !video.videoHeight) {
+    renderOcrMessage("La cámara todavía no está lista. Intenta nuevamente.", "warning");
+    return;
+  }
+
+  const sourceWidth = video.videoWidth;
+  const sourceHeight = video.videoHeight;
+  const cropWidth = Math.round(sourceWidth * 0.72);
+  const cropHeight = Math.round(sourceHeight * 0.24);
+  const cropX = Math.round((sourceWidth - cropWidth) / 2);
+  const cropY = Math.round((sourceHeight - cropHeight) / 2);
+  const canvas = fields.dashboardCameraCanvas;
+  const outputWidth = 1200;
+  const outputHeight = Math.round(outputWidth * (cropHeight / cropWidth));
+  canvas.width = outputWidth;
+  canvas.height = outputHeight;
+
+  const context = canvas.getContext("2d");
+  context.filter = "grayscale(1) contrast(1.35)";
+  context.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, outputWidth, outputHeight);
+
+  canvas.toBlob(async (blob) => {
+    if (!blob) {
+      renderOcrMessage("No se pudo capturar la zona enfocada.", "warning");
+      return;
+    }
+    closeDashboardCamera();
+    const file = new File([blob], "odometro-recortado.jpg", { type: "image/jpeg" });
+    await handleDashboardPhoto(file);
+  }, "image/jpeg", 0.92);
 }
 
 // Carga Tesseract.js solo cuando se necesita reconocer una imagen.
